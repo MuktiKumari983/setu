@@ -1,0 +1,42 @@
+spring:
+  application:
+    name: sih-innovation-platform
+  datasource:
+    url: ${DB_URL:jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:sih_platform}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${DB_USERNAME:sih}
+    password: ${DB_PASSWORD:sih_password}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: false
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+  servlet:
+    multipart:
+      max-file-size: 10MB
+
+server:
+  port: 8080
+
+app:
+  # Make sure JWT secret is changed in production via env var.
+  jwt:
+    secret: ${JWT_SECRET:dev-secret-change-me-please-32-characters-minimum}
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+  ai:
+    url: ${AI_SERVICE_URL:http://localhost:8000}
+    enabled: ${AI_ENABLED:true}
+    timeout-ms: 8000
+  cors:
+    origin: ${FRONTEND_ORIGIN:http://localhost:5173}
+
+logging:
+  level:
+    root: INFO
+    com.sih.innovationplatform: INFO
+    org.hibernate.SQL: WARN
