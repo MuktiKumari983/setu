@@ -7,6 +7,6 @@ public enum MatchType {
     INDUSTRY;
 
     public String forAi() {
-        return name().toLowerCase();
+        return name();
     }
 }

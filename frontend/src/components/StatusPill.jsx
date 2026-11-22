@@ -1,6 +1,6 @@
 const COLORS = {
   SUBMITTED: '#64748b',
-  VERIFIED: '#0ea5e9',
+  VERIFIED: '#16a34a',
   MATCHED: '#6366f1',
   TEAM_FORMED: '#8b5cf6',
   PROPOSAL: '#0d9488',
@@ -25,7 +25,6 @@ const COLORS = {
   REJECTED: '#dc2626',
   PENDING_REVIEW: '#f59e0b',
   VERIFIED_RECORD: '#16a34a',
-  VERIFIED: '#16a34a',
 }
 
 export default function StatusPill({ value }) {

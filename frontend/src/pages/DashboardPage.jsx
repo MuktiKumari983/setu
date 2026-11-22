@@ -2,9 +2,19 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { dashboardApi, problemApi } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import { can, roleLabel } from '../auth/roles'
+import ErrorBanner from '../components/ErrorBanner'
 import StatCard from '../components/StatCard'
 import StatusPill from '../components/StatusPill'
 import { errorMessage, fmtDateTime } from '../util'
+
+const QUICK_ACTIONS = [
+  { capability: 'submitChallenges', to: '/challenges', label: 'Submit a challenge' },
+  { capability: 'createProjects', to: '/projects/new', label: 'Create a project' },
+  { capability: 'viewCapabilities', to: '/capabilities', label: 'View capabilities' },
+  { capability: 'viewCatalog', to: '/catalog', label: 'Browse partner catalog' },
+  { capability: 'reviewImpact', to: '/impact', label: 'Review impact evidence' },
+]
 
 export default function DashboardPage() {
   const { user } = useAuth()
@@ -22,15 +32,31 @@ export default function DashboardPage() {
   }, [])
 
   const isVerifier = ['GOVERNMENT_ADMIN', 'PLATFORM_ADMIN'].includes(user?.role)
+  const topCategories = analytics
+    ? Object.entries(analytics.byCategory || {}).sort((a, b) => b[1] - a[1]).slice(0, 6)
+    : []
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-lg font-semibold text-slate-800">Welcome, {user?.name}</h1>
-        <p className="text-sm text-slate-500">Role: {user?.role?.replace('_', ' ')}</p>
+        <p className="text-sm text-slate-500">Role: {roleLabel(user?.role)}</p>
       </div>
 
-      {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
+      <section className="card" aria-labelledby="quick-actions-heading">
+        <h2 id="quick-actions-heading" className="text-sm font-semibold text-slate-700">
+          Quick actions for {roleLabel(user?.role)}
+        </h2>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {QUICK_ACTIONS.filter((action) => can(user, action.capability)).map((action) => (
+            <Link key={action.to} to={action.to} className="btn-secondary">
+              {action.label}
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <ErrorBanner message={error} />
 
       {analytics && (
         <>
@@ -48,11 +74,11 @@ export default function DashboardPage() {
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="card">
               <h3 className="mb-3 text-sm font-semibold text-slate-700">Top challenge categories</h3>
+              <p className="sr-only">
+                Top challenge categories: {topCategories.map(([name, count]) => `${name}: ${count}`).join(', ') || 'none'}
+              </p>
               <div className="space-y-2">
-                {Object.entries(analytics.byCategory || {})
-                  .sort((a, b) => b[1] - a[1])
-                  .slice(0, 6)
-                  .map(([name, count]) => (
+                {topCategories.map(([name, count]) => (
                     <div key={name} className="flex items-center justify-between">
                       <span className="text-sm text-slate-600">{name}</span>
                       <div className="flex items-center gap-3">
@@ -72,7 +98,7 @@ export default function DashboardPage() {
             <div className="card">
               <h3 className="mb-3 text-sm font-semibold text-slate-700">Challenges awaiting verification</h3>
               {problems.length === 0 ? (
-                <p className="text-sm text-slate-400">No submitted challenges right now.</p>
+                <p className="text-sm text-slate-400" aria-live="polite">No submitted challenges right now.</p>
               ) : (
                 <ul className="divide-y divide-slate-100">
                   {problems.slice(0, 8).map((p) => (

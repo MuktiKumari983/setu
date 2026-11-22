@@ -10,6 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -32,6 +33,10 @@ public class Problem {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
 
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "submitter_id")
@@ -82,6 +87,24 @@ public class Problem {
 
     @Column(name = "ai_explanation", columnDefinition = "TEXT")
     private String aiExplanation;
+
+    @Column(name = "ai_root_causes", columnDefinition = "TEXT")
+    private String aiRootCauses;
+
+    @Column(name = "ai_target_beneficiaries", columnDefinition = "TEXT")
+    private String aiTargetBeneficiaries;
+
+    @Column(name = "ai_challenges", columnDefinition = "TEXT")
+    private String aiChallenges;
+
+    @Column(name = "ai_solution_directions", columnDefinition = "TEXT")
+    private String aiSolutionDirections;
+
+    @Column(name = "ai_expected_outcomes", columnDefinition = "TEXT")
+    private String aiExpectedOutcomes;
+
+    @Column(name = "ai_source", length = 20)
+    private String aiSource;
 
     @Column(name = "ai_similarity")
     private Double aiSimilarity;

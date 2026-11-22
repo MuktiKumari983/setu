@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { problemApi } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import ErrorBanner from '../components/ErrorBanner'
 import StatusPill from '../components/StatusPill'
 import { errorMessage } from '../util'
 
@@ -37,7 +38,6 @@ export default function ChallengesPage() {
 
   useEffect(() => {
     load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, category])
 
   async function submit(e) {
@@ -64,49 +64,49 @@ export default function ChallengesPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold text-slate-800">Community Challenges</h1>
         {isCitizen && (
-          <button className="btn-primary" onClick={() => setShowForm((v) => !v)}>
+          <button type="button" className="btn-primary" aria-expanded={showForm} aria-controls={showForm ? 'challenge-form' : undefined} onClick={() => setShowForm((v) => !v)}>
             {showForm ? 'Cancel' : 'Submit a challenge'}
           </button>
         )}
       </div>
 
-      {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
+      <ErrorBanner message={error} />
 
       {isCitizen && showForm && (
         <div className="card">
           <h3 className="mb-3 text-sm font-semibold text-slate-700">Describe a community problem</h3>
-          <form onSubmit={submit} className="grid gap-4 md:grid-cols-2">
+          <form onSubmit={submit} className="grid gap-4 md:grid-cols-2" id="challenge-form">
             <div className="md:col-span-2">
-              <label className="label">Title</label>
-              <input className="input" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} required />
+              <label className="label" htmlFor="challenge-title">Title</label>
+              <input id="challenge-title" className="input" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} required />
             </div>
             <div className="md:col-span-2">
-              <label className="label">Description</label>
-              <textarea className="input" rows={4} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} required />
+              <label className="label" htmlFor="challenge-description">Description</label>
+              <textarea id="challenge-description" className="input" rows={4} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} required />
             </div>
             <div>
-              <label className="label">Location</label>
-              <input className="input" value={form.location} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))} required />
+              <label className="label" htmlFor="challenge-location">Location</label>
+              <input id="challenge-location" className="input" value={form.location} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))} required />
             </div>
             <div>
-              <label className="label">Estimated beneficiaries</label>
-              <input className="input" type="number" value={form.estimatedBeneficiaries} onChange={(e) => setForm((f) => ({ ...f, estimatedBeneficiaries: e.target.value }))} />
+              <label className="label" htmlFor="challenge-beneficiaries">Estimated beneficiaries</label>
+              <input id="challenge-beneficiaries" className="input" type="number" value={form.estimatedBeneficiaries} onChange={(e) => setForm((f) => ({ ...f, estimatedBeneficiaries: e.target.value }))} />
             </div>
             <div>
-              <label className="label">Urgency</label>
-              <select className="input" value={form.urgency} onChange={(e) => setForm((f) => ({ ...f, urgency: e.target.value }))}>
+              <label className="label" htmlFor="challenge-urgency">Urgency</label>
+              <select id="challenge-urgency" className="input" value={form.urgency} onChange={(e) => setForm((f) => ({ ...f, urgency: e.target.value }))}>
                 <option>LOW</option>
                 <option>MEDIUM</option>
                 <option>HIGH</option>
               </select>
             </div>
             <div>
-              <label className="label">Required outcome</label>
-              <input className="input" value={form.requiredOutcome} onChange={(e) => setForm((f) => ({ ...f, requiredOutcome: e.target.value }))} />
+              <label className="label" htmlFor="challenge-outcome">Required outcome</label>
+              <input id="challenge-outcome" className="input" value={form.requiredOutcome} onChange={(e) => setForm((f) => ({ ...f, requiredOutcome: e.target.value }))} />
             </div>
             <div className="md:col-span-2">
-              <button className="btn-primary" disabled={busy}>
-                {busy ? 'Submitting...' : 'Submit for AI analysis & approval'}
+              <button type="submit" className="btn-primary" disabled={busy}>
+                <span aria-live="polite">{busy ? 'Submitting...' : 'Submit for AI analysis & approval'}</span>
               </button>
             </div>
           </form>
@@ -114,7 +114,7 @@ export default function ChallengesPage() {
       )}
 
       <div className="flex flex-wrap items-center gap-3">
-        <select className="input w-48" value={status} onChange={(e) => setStatus(e.target.value)}>
+        <select className="input w-48" aria-label="Filter by status" value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">All statuses</option>
           {STATUSES.filter(Boolean).map((s) => (
             <option key={s}>{s}</option>
@@ -122,6 +122,7 @@ export default function ChallengesPage() {
         </select>
         <input
           className="input w-64"
+          aria-label="Filter by category"
           placeholder="Filter by category..."
           value={category}
           onChange={(e) => setCategory(e.target.value)}
@@ -129,7 +130,7 @@ export default function ChallengesPage() {
       </div>
 
       {problems.length === 0 ? (
-        <p className="text-sm text-slate-400">No challenges match your filters.</p>
+        <p className="text-sm text-slate-400" aria-live="polite">No challenges match your filters.</p>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {problems.map((p) => (
@@ -156,7 +157,7 @@ export default function ChallengesPage() {
 
       {isVerifier && problems.length > 0 && (
         <p className="text-xs text-slate-400">
-          Use the verification actions on each challenge's detail page to approve or reject.
+          Use the verification actions on each challenge&apos;s detail page to approve or reject.
         </p>
       )}
     </div>

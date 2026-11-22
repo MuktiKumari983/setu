@@ -9,6 +9,7 @@ public record MatchDto(
         Double score,
         String explanation,
         List<String> contributingFactors,
-        String status
+        String status,
+        String source
 ) {
 }

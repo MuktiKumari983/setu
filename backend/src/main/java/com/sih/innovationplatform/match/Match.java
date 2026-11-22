@@ -9,6 +9,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -26,6 +27,10 @@ public class Match {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
 
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "problem_id", nullable = false)
@@ -48,6 +53,9 @@ public class Match {
 
     @Column(name = "status", length = 30)
     private String status = "PROPOSED";
+
+    @Column(name = "source", length = 20)
+    private String source;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();

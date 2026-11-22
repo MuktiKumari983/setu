@@ -1,28 +1,55 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { projectApi } from '../api/client'
+import { useAuth } from '../auth/AuthContext'
+import { can } from '../auth/roles'
+import EmptyState from '../components/EmptyState'
+import ErrorBanner from '../components/ErrorBanner'
+import Spinner from '../components/Spinner'
 import StatusPill from '../components/StatusPill'
-import { errorMessage, fmtDateTime } from '../util'
+import { errorMessage } from '../util'
 
 export default function ProjectsPage() {
+  const { user } = useAuth()
   const [projects, setProjects] = useState([])
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     projectApi
       .list()
       .then(setProjects)
       .catch((e) => setError(errorMessage(e)))
+      .finally(() => setLoading(false))
   }, [])
 
   return (
     <div className="space-y-5">
-      <h1 className="text-lg font-semibold text-slate-800">Innovation Projects</h1>
-      {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-semibold text-slate-800">Innovation Projects</h1>
+          <p className="mt-1 text-sm text-slate-500">Delivery workspaces created from verified challenges.</p>
+        </div>
+        {can(user, 'createProjects') && (
+          <Link to="/projects/new" className="btn-primary">
+            New project
+          </Link>
+        )}
+      </div>
 
-      {projects.length === 0 ? (
-        <p className="text-sm text-slate-400">No projects yet. Projects form after a challenge is matched.</p>
-      ) : (
+      <ErrorBanner message={error} />
+      {loading && <Spinner label="Loading projects..." />}
+
+      {!loading && projects.length === 0 && (
+        <EmptyState
+          title="No projects yet"
+          description="Projects form after a challenge is verified or matched."
+          to={can(user, 'createProjects') ? '/projects/new' : '/challenges'}
+          actionLabel={can(user, 'createProjects') ? 'Create a project' : 'Browse challenges'}
+        />
+      )}
+
+      {!loading && projects.length > 0 && (
         <div className="overflow-x-auto">
           <table className="w-full min-w-0 text-sm">
             <thead>
@@ -51,10 +78,17 @@ export default function ProjectsPage() {
                   </td>
                   <td className="py-3">
                     <div className="flex items-center gap-2">
-                      <div className="h-2 w-20 overflow-hidden rounded-full bg-slate-200">
+                      <div
+                        className="h-2 w-20 overflow-hidden rounded-full bg-slate-200"
+                        role="progressbar"
+                        aria-valuenow={p.progressPercent || 0}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-label={`${p.title} progress`}
+                      >
                         <div className="h-full rounded-full bg-brand-500" style={{ width: `${p.progressPercent || 0}%` }} />
                       </div>
-                      <span className="text-xs font-medium text-slate-500">{p.progressPercent}%</span>
+                      <span className="text-xs font-medium text-slate-500">{p.progressPercent || 0}%</span>
                     </div>
                   </td>
                 </tr>
@@ -63,7 +97,6 @@ export default function ProjectsPage() {
           </table>
         </div>
       )}
-      <p className="text-xs text-slate-400">{fmtDateTime(new Date().toISOString())}</p>
     </div>
   )
 }

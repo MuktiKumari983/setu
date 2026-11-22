@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { problemApi } from '../api/client'
+import { aiSourceLabel, asList } from '../api/contract'
 import { useAuth } from '../auth/AuthContext'
+import ErrorBanner from '../components/ErrorBanner'
 import StatusPill from '../components/StatusPill'
-import ScoreMeter from '../components/ScoreMeter'
 import { errorMessage, fmtDateTime } from '../util'
 
 export default function ChallengeDetailPage() {
@@ -26,7 +27,6 @@ export default function ChallengeDetailPage() {
 
   useEffect(() => {
     load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   async function action(fn, label) {
@@ -43,7 +43,7 @@ export default function ChallengeDetailPage() {
     }
   }
 
-  if (!problem && !error) return <p className="text-sm text-slate-500">Loading...</p>
+  if (!problem && !error) return <p className="text-sm text-slate-500" aria-live="polite">Loading...</p>
 
   return (
     <div className="space-y-5">
@@ -56,12 +56,13 @@ export default function ChallengeDetailPage() {
             View matching
           </Link>
           {canEdit && (
-            <button className="btn-secondary" onClick={() => action(() => problemApi.analyze(problem.id), 'Request AI re-analysis')}>
+            <button type="button" className="btn-secondary" onClick={() => action(() => problemApi.analyze(problem.id), 'Request AI re-analysis')}>
               Re-analyze
             </button>
           )}
           {isVerifier && (
             <button
+              type="button"
               className="btn-primary"
               disabled={busy || problem?.status === 'VERIFIED' || problem?.status === 'MATCHED'}
               onClick={() => action(() => problemApi.verify(problem.id), 'Verify this challenge')}
@@ -72,7 +73,7 @@ export default function ChallengeDetailPage() {
         </div>
       </div>
 
-      {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
+      <ErrorBanner message={error} />
 
       {problem && (
         <>
@@ -117,9 +118,12 @@ export default function ChallengeDetailPage() {
                   {problem.aiCategory}
                 </span>
                 <StatusPill value={problem.aiUrgency} />
-                <div className="text-xs text-slate-500">
-                  Confidence: <strong>{Math.round(problem.aiConfidence * 100)}%</strong>
-                </div>
+                  <div className="text-xs text-slate-500">
+                    Confidence: <strong>{Math.round(problem.aiConfidence * 100)}%</strong>
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    Source: <strong>{aiSourceLabel(problem.aiSource)}</strong>
+                  </div>
                 {problem.aiSimilarity > 0 && (
                   <div className="flex items-center gap-2 text-xs text-slate-500">
                     Similar to existing challenge:
@@ -135,15 +139,33 @@ export default function ChallengeDetailPage() {
               </div>
               <p className="mt-3 text-xs text-slate-500">{problem.aiExplanation}</p>
               <div className="mt-3 flex flex-wrap gap-2">
-                {(problem.aiSkills || []).map((s) => (
+                {asList(problem.aiSkills).map((s) => (
                   <span key={s} className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
                     {s}
                   </span>
                 ))}
               </div>
-              {(problem.aiKeywords || []).length > 0 && (
-                <p className="mt-2 text-xs text-slate-400">Keywords: {problem.aiKeywords.join(', ')}</p>
+              {asList(problem.aiKeywords).length > 0 && (
+                <p className="mt-2 text-xs text-slate-400">Keywords: {asList(problem.aiKeywords).join(', ')}</p>
               )}
+              {[
+                ['Root causes', problem.aiRootCauses],
+                ['Target beneficiaries', problem.aiTargetBeneficiaries],
+                ['Challenges', problem.aiChallenges],
+                ['Solution directions', problem.aiSolutionDirections],
+                ['Expected outcomes', problem.aiExpectedOutcomes],
+              ]
+                .filter(([, value]) => asList(value).length > 0)
+                .map(([label, value]) => (
+                  <div key={label} className="mt-3">
+                    <p className="text-xs font-semibold text-slate-600">{label}</p>
+                    <ul className="mt-1 list-disc pl-4 text-xs text-slate-500">
+                      {asList(value).map((item, index) => (
+                        <li key={`${label}-${index}`}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
             </div>
           )}
 
@@ -177,6 +199,7 @@ export default function ChallengeDetailPage() {
               <Link to={`/matching/${problem.id}`} className="btn-primary">
                 Run matching
               </Link>
+              <span className="sr-only" aria-live="polite">{busy ? 'Working, please wait.' : ''}</span>
             </div>
           </div>
         </>

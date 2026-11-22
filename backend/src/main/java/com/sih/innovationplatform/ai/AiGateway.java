@@ -10,7 +10,11 @@ public interface AiGateway {
         return true;
     }
 
-    AiModels.AnalyzeResult analyze(String title, String description);
+    default AiModels.AnalyzeResult analyze(String title, String description) {
+        return analyze(title, description, null);
+    }
+
+    AiModels.AnalyzeResult analyze(String title, String description, String requiredOutcome);
 
     List<AiModels.SimilarProblem> duplicates(String title, String description,
                                              List<AiModels.ExistingProblem> existing);

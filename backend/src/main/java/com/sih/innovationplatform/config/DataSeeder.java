@@ -47,6 +47,7 @@ import com.sih.innovationplatform.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -63,8 +64,13 @@ import java.util.Map;
  */
 @Slf4j
 @Component
+@ConditionalOnProperty(name = "app.seed.enabled", havingValue = "true", matchIfMissing = false)
 @RequiredArgsConstructor
 public class DataSeeder implements CommandLineRunner {
+
+    private static final LocalDate SEED_TARGET_DATE = LocalDate.of(2026, 1, 15);
+    private static final LocalDateTime SEED_COMPLETED_AT = LocalDateTime.of(2026, 1, 15, 12, 0);
+    private static final LocalDateTime SEED_REVIEWED_AT = LocalDateTime.of(2026, 1, 20, 10, 0);
 
     private final RoleRepository roleRepo;
     private final UserRepository userRepo;
@@ -93,7 +99,9 @@ public class DataSeeder implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) {
-        if (problemRepo.count() > 0) {
+        if (problemRepo.count() > 0 || roleRepo.count() > 0 || userRepo.count() > 0
+                || categoryRepo.count() > 0 || universityRepo.count() > 0 || industryRepo.count() > 0
+                || projectRepo.count() > 0 || matchRepo.count() > 0) {
             return;
         }
         log.info("Seeding demo data...");
@@ -595,20 +603,20 @@ public class DataSeeder implements CommandLineRunner {
         member(saved, student, "TEAM_LEAD");
         member(saved, citizen, "CITIZEN");
 
-        // seeding common matches for this problem
-        match(problem.getId(), "UNIVERSITY", uni.getId(), 0.90 + Math.random() * 0.05,
+        long seedIndex = problem.getId();
+        match(problem.getId(), "UNIVERSITY", uni.getId(), seedScore(seedIndex, "UNIVERSITY"),
                 "Listed departments and research areas cover the required capabilities",
                 List.of("Matched skills", "Research alignment"));
-        match(problem.getId(), "TEAM", team.getId(), 0.90 + Math.random() * 0.05,
+        match(problem.getId(), "TEAM", team.getId(), seedScore(seedIndex, "TEAM"),
                 "Team skills include the required stack",
                 List.of("Java", "IoT", "Data Analytics"));
         if (mentor != null) {
-            match(problem.getId(), "MENTOR", mentor.getId(), 0.88 + Math.random() * 0.05,
+            match(problem.getId(), "MENTOR", mentor.getId(), seedScore(seedIndex, "MENTOR"),
                     "Expertise overlaps the problem domain",
                     List.of("Domain expertise", "Research area"));
         }
         if (industry != null) {
-            match(problem.getId(), "INDUSTRY", industry.getId(), 0.87 + Math.random() * 0.05,
+            match(problem.getId(), "INDUSTRY", industry.getId(), seedScore(seedIndex, "INDUSTRY"),
                     "Hardware and deployment capabilities available",
                     List.of("IoT hardware", "Deployment"));
         }
@@ -675,9 +683,9 @@ public class DataSeeder implements CommandLineRunner {
         m.setTitle(title);
         m.setDescription(desc);
         m.setStatus(status);
-        m.setTargetDate(LocalDate.now().plusDays(30));
+        m.setTargetDate(SEED_TARGET_DATE.plusDays(30));
         if ("COMPLETED".equals(status)) {
-            m.setCompletedAt(LocalDateTime.now());
+            m.setCompletedAt(SEED_COMPLETED_AT);
         }
         milestoneRepo.save(m);
     }
@@ -708,6 +716,17 @@ public class DataSeeder implements CommandLineRunner {
         d.setUrl(url);
         d.setUploader(student);
         documentRepo.save(d);
+    }
+
+    static double seedScore(long seed, String type) {
+        int base = switch (type) {
+            case "UNIVERSITY" -> 90;
+            case "TEAM" -> 91;
+            case "MENTOR" -> 88;
+            case "INDUSTRY" -> 87;
+            default -> 85;
+        };
+        return Math.min(0.99, (base + (int) (seed % 5)) / 100.0);
     }
 
     private void match(Long problemId, String type, Long entityId, double score, String explanation, List<String> factors) {
@@ -750,7 +769,7 @@ public class DataSeeder implements CommandLineRunner {
             e1.setSubmittedBy(student);
             if (i != 0) {
                 e1.setReviewedBy(admin);
-                e1.setReviewedAt(LocalDateTime.now());
+                e1.setReviewedAt(SEED_REVIEWED_AT);
             }
             evidenceRepo.save(e1);
         }

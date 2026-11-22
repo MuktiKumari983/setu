@@ -1,9 +1,34 @@
 import { useEffect, useState } from 'react'
 import { impactApi, projectApi } from '../api/client'
+import { toNumberOrZero } from '../api/contract'
 import { useAuth } from '../auth/AuthContext'
+import EmptyState from '../components/EmptyState'
+import ErrorBanner from '../components/ErrorBanner'
+import FormField from '../components/FormField'
+import Spinner from '../components/Spinner'
 import StatCard from '../components/StatCard'
 import StatusPill from '../components/StatusPill'
+import SuccessBanner from '../components/SuccessBanner'
 import { errorMessage, fmtDateTime } from '../util'
+
+const EMPTY_IMPACT = {
+  projectId: '',
+  beneficiaries: '',
+  locationsCovered: '',
+  costSavings: '',
+  problemReduction: '',
+  durationMonths: '',
+  implementationPercent: '',
+  domainMetrics: '',
+}
+
+const EMPTY_EVIDENCE = {
+  projectId: '',
+  impactRecordId: '',
+  evidenceType: 'WITNESS_STATEMENT',
+  description: '',
+  fileUrl: '',
+}
 
 export default function ImpactPage() {
   const { user } = useAuth()
@@ -11,15 +36,17 @@ export default function ImpactPage() {
   const [stats, setStats] = useState(null)
   const [projects, setProjects] = useState([])
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
   const [busy, setBusy] = useState(false)
-  const [form, setForm] = useState({ projectId: '', beneficiaries: '', locationsCovered: '', costSavings: '', problemReduction: '', durationMonths: '12', implementationPercent: '100' })
-  const [evidence, setEvidence] = useState({ projectId: '', evidenceType: 'WITNESS_STATEMENT', description: '', fileUrl: '' })
+  const [loading, setLoading] = useState(true)
+  const [form, setForm] = useState(EMPTY_IMPACT)
+  const [evidence, setEvidence] = useState(EMPTY_EVIDENCE)
 
   const isReviewer = ['GOVERNMENT_ADMIN', 'PLATFORM_ADMIN'].includes(user?.role)
 
   function load() {
     setError('')
-    Promise.all([impactApi.list(), impactApi.stats()])
+    return Promise.all([impactApi.list(), impactApi.stats()])
       .then(([r, s]) => {
         setRecords(r)
         setStats(s)
@@ -28,29 +55,45 @@ export default function ImpactPage() {
   }
 
   useEffect(() => {
-    load()
-    projectApi
-      .list()
-      .then(setProjects)
-      .catch(() => {})
+    Promise.all([
+      load(),
+      projectApi.list().then(setProjects).catch(() => {}),
+    ]).finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    if (!evidence.projectId) {
+      if (evidence.impactRecordId) {
+        setEvidence((ev) => ({ ...ev, impactRecordId: '' }))
+      }
+      return
+    }
+    const matchingRecord = records.find((r) => String(r.projectId) === String(evidence.projectId))
+    if (matchingRecord && String(evidence.impactRecordId) !== String(matchingRecord.id)) {
+      setEvidence((ev) => ({ ...ev, impactRecordId: matchingRecord.id }))
+    } else if (!matchingRecord && evidence.impactRecordId) {
+      setEvidence((ev) => ({ ...ev, impactRecordId: '' }))
+    }
+  }, [records, evidence.projectId, evidence.impactRecordId])
 
   async function submitImpact(e) {
     e.preventDefault()
     setBusy(true)
     setError('')
+    setSuccess('')
     try {
       await impactApi.submit(Number(form.projectId), {
-        beneficiaries: Number(form.beneficiaries),
-        locationsCovered: form.locationsCovered ? Number(form.locationsCovered) : 0,
-        costSavings: form.costSavings ? Number(form.costSavings) : 0,
+        beneficiaries: toNumberOrZero(form.beneficiaries),
+        locationsCovered: toNumberOrZero(form.locationsCovered),
+        costSavings: toNumberOrZero(form.costSavings),
         problemReduction: form.problemReduction,
-        durationMonths: Number(form.durationMonths),
-        implementationPercent: Number(form.implementationPercent),
-        domainMetrics: '',
+        durationMonths: toNumberOrZero(form.durationMonths),
+        implementationPercent: toNumberOrZero(form.implementationPercent),
+        domainMetrics: form.domainMetrics,
       })
-      setForm({ projectId: '', beneficiaries: '', locationsCovered: '', costSavings: '', problemReduction: '', durationMonths: '12', implementationPercent: '100' })
-      load()
+      setForm(EMPTY_IMPACT)
+      setSuccess('Impact submitted for verification.')
+      await load()
     } catch (err) {
       setError(errorMessage(err))
     } finally {
@@ -60,17 +103,23 @@ export default function ImpactPage() {
 
   async function addEvidence(e) {
     e.preventDefault()
-    setBusy(true)
     setError('')
+    setSuccess('')
+    if (!evidence.impactRecordId) {
+      setError('Select an impact record before attaching evidence.')
+      return
+    }
+    setBusy(true)
     try {
       await impactApi.addEvidence(Number(evidence.projectId), {
-        impactRecordId: 0,
+        impactRecordId: Number(evidence.impactRecordId),
         evidenceType: evidence.evidenceType,
         description: evidence.description,
         fileUrl: evidence.fileUrl,
       })
-      setEvidence({ projectId: '', evidenceType: 'WITNESS_STATEMENT', description: '', fileUrl: '' })
-      load()
+      setEvidence(EMPTY_EVIDENCE)
+      setSuccess('Evidence attached to the impact record.')
+      await load()
     } catch (err) {
       setError(errorMessage(err))
     } finally {
@@ -79,9 +128,12 @@ export default function ImpactPage() {
   }
 
   async function review(evidenceId, status) {
+    setError('')
+    setSuccess('')
     try {
       await impactApi.reviewEvidence(evidenceId, status)
-      load()
+      setSuccess(`Evidence ${status.toLowerCase()} successfully.`)
+      await load()
     } catch (err) {
       setError(errorMessage(err))
     }
@@ -89,8 +141,14 @@ export default function ImpactPage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-lg font-semibold text-slate-800">Social Impact & Evidence Verification</h1>
-      {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
+      <div>
+        <h1 className="text-lg font-semibold text-slate-800">Social Impact & Evidence Verification</h1>
+        <p className="mt-1 text-sm text-slate-500">Record outcomes and review supporting evidence.</p>
+      </div>
+
+      <ErrorBanner message={error} />
+      <SuccessBanner message={success} />
+      {loading && <Spinner label="Loading impact data..." />}
 
       {stats && (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -101,56 +159,114 @@ export default function ImpactPage() {
         </div>
       )}
 
-      {projects.length > 0 && (
+      {!loading && projects.length > 0 && (
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="card">
-            <h3 className="mb-3 text-sm font-semibold text-slate-700">Submit impact for a project</h3>
-            <form onSubmit={submitImpact} className="grid gap-2">
-              <select className="input" value={form.projectId} onChange={(e) => setForm((f) => ({ ...f, projectId: e.target.value }))} required>
-                <option value="">Select project...</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.title}
-                  </option>
-                ))}
-              </select>
+            <h2 className="mb-3 text-sm font-semibold text-slate-700">Submit impact for a project</h2>
+            <form onSubmit={submitImpact} className="grid gap-3">
+              <FormField id="impact-project" label="Project">
+                <select
+                  id="impact-project"
+                  className="input"
+                  value={form.projectId}
+                  onChange={(e) => setForm((f) => ({ ...f, projectId: e.target.value }))}
+                  required
+                >
+                  <option value="">Select project...</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.title}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
               <div className="grid grid-cols-2 gap-2">
-                <input className="input" type="number" placeholder="Beneficiaries reached" value={form.beneficiaries} onChange={(e) => setForm((f) => ({ ...f, beneficiaries: e.target.value }))} required />
-                <input className="input" type="number" placeholder="Locations covered" value={form.locationsCovered} onChange={(e) => setForm((f) => ({ ...f, locationsCovered: e.target.value }))} />
+                <FormField id="impact-beneficiaries" label="Beneficiaries reached">
+                  <input id="impact-beneficiaries" className="input" type="number" min="0" value={form.beneficiaries} onChange={(e) => setForm((f) => ({ ...f, beneficiaries: e.target.value }))} required />
+                </FormField>
+                <FormField id="impact-locations" label="Locations covered">
+                  <input id="impact-locations" className="input" type="number" min="0" value={form.locationsCovered} onChange={(e) => setForm((f) => ({ ...f, locationsCovered: e.target.value }))} />
+                </FormField>
               </div>
-              <input className="input" placeholder="Problem reduction (e.g. 40% fewer contamination incidents)" value={form.problemReduction} onChange={(e) => setForm((f) => ({ ...f, problemReduction: e.target.value }))} />
+              <FormField id="impact-reduction" label="Problem reduction">
+                <input id="impact-reduction" className="input" value={form.problemReduction} onChange={(e) => setForm((f) => ({ ...f, problemReduction: e.target.value }))} />
+              </FormField>
               <div className="grid grid-cols-2 gap-2">
-                <input className="input" type="number" step="0.01" placeholder="Cost savings (INR)" value={form.costSavings} onChange={(e) => setForm((f) => ({ ...f, costSavings: e.target.value }))} />
-                <input className="input" type="number" placeholder="Duration (months)" value={form.durationMonths} onChange={(e) => setForm((f) => ({ ...f, durationMonths: e.target.value }))} />
+                <FormField id="impact-savings" label="Cost savings (INR)">
+                  <input id="impact-savings" className="input" type="number" min="0" step="0.01" value={form.costSavings} onChange={(e) => setForm((f) => ({ ...f, costSavings: e.target.value }))} />
+                </FormField>
+                <FormField id="impact-duration" label="Duration (months)">
+                  <input id="impact-duration" className="input" type="number" min="0" value={form.durationMonths} onChange={(e) => setForm((f) => ({ ...f, durationMonths: e.target.value }))} />
+                </FormField>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <FormField id="impact-implementation" label="Implementation %">
+                  <input id="impact-implementation" className="input" type="number" min="0" max="100" value={form.implementationPercent} onChange={(e) => setForm((f) => ({ ...f, implementationPercent: e.target.value }))} required />
+                </FormField>
+                <FormField id="impact-domain" label="Domain metrics">
+                  <input id="impact-domain" className="input" value={form.domainMetrics} onChange={(e) => setForm((f) => ({ ...f, domainMetrics: e.target.value }))} />
+                </FormField>
               </div>
               <button className="btn-primary" disabled={busy}>
-                Submit for verification
+                {busy ? 'Submitting...' : 'Submit for verification'}
               </button>
             </form>
           </div>
 
           <div className="card">
-            <h3 className="mb-3 text-sm font-semibold text-slate-700">Add evidence</h3>
-            <form onSubmit={addEvidence} className="grid gap-2">
-              <select className="input" value={evidence.projectId} onChange={(e) => setEvidence((ev) => ({ ...ev, projectId: e.target.value }))} required>
-                <option value="">Select project...</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.title}
-                  </option>
-                ))}
-              </select>
-              <select className="input" value={evidence.evidenceType} onChange={(e) => setEvidence((ev) => ({ ...ev, evidenceType: e.target.value }))}>
-                <option>WITNESS_STATEMENT</option>
-                <option>OFFICIAL_RECORD</option>
-                <option>PROJECT_DATA</option>
-                <option>AUDIT_REPORT</option>
-                <option>PHOTO</option>
-              </select>
-              <input className="input" placeholder="What does this evidence show?" value={evidence.description} onChange={(e) => setEvidence((ev) => ({ ...ev, description: e.target.value }))} required />
-              <input className="input" placeholder="/files/evidence.pdf" value={evidence.fileUrl} onChange={(e) => setEvidence((ev) => ({ ...ev, fileUrl: e.target.value }))} />
+            <h2 className="mb-3 text-sm font-semibold text-slate-700">Add evidence</h2>
+            <form onSubmit={addEvidence} className="grid gap-3">
+              <FormField id="evidence-project" label="Project">
+                <select
+                  id="evidence-project"
+                  className="input"
+                  value={evidence.projectId}
+                  onChange={(e) => setEvidence((ev) => ({ ...ev, projectId: e.target.value, impactRecordId: '' }))}
+                  required
+                >
+                  <option value="">Select project...</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.title}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+              <FormField id="evidence-record" label="Impact record">
+                <select
+                  id="evidence-record"
+                  className="input"
+                  value={evidence.impactRecordId}
+                  onChange={(e) => setEvidence((ev) => ({ ...ev, impactRecordId: e.target.value }))}
+                  required
+                >
+                  <option value="">Select impact record...</option>
+                  {records
+                    .filter((r) => String(r.projectId) === String(evidence.projectId))
+                    .map((r) => (
+                      <option key={r.id} value={r.id}>
+                        #{r.id} - {r.beneficiaries} beneficiaries ({r.verificationStatus})
+                      </option>
+                    ))}
+                </select>
+              </FormField>
+              <FormField id="evidence-type" label="Evidence type">
+                <select id="evidence-type" className="input" value={evidence.evidenceType} onChange={(e) => setEvidence((ev) => ({ ...ev, evidenceType: e.target.value }))}>
+                  <option>WITNESS_STATEMENT</option>
+                  <option>OFFICIAL_RECORD</option>
+                  <option>PROJECT_DATA</option>
+                  <option>AUDIT_REPORT</option>
+                  <option>PHOTO</option>
+                </select>
+              </FormField>
+              <FormField id="evidence-description" label="What does this evidence show?">
+                <input id="evidence-description" className="input" value={evidence.description} onChange={(e) => setEvidence((ev) => ({ ...ev, description: e.target.value }))} required />
+              </FormField>
+              <FormField id="evidence-url" label="File or document URL">
+                <input id="evidence-url" className="input" value={evidence.fileUrl} onChange={(e) => setEvidence((ev) => ({ ...ev, fileUrl: e.target.value }))} />
+              </FormField>
               <button className="btn-primary" disabled={busy}>
-                Attach evidence
+                {busy ? 'Attaching...' : 'Attach evidence'}
               </button>
             </form>
           </div>
@@ -158,13 +274,13 @@ export default function ImpactPage() {
       )}
 
       <div className="card">
-        <h3 className="mb-3 text-sm font-semibold text-slate-700">Impact records</h3>
-        {records.length === 0 ? (
-          <p className="text-sm text-slate-400">No impact records yet.</p>
+        <h2 className="mb-3 text-sm font-semibold text-slate-700">Impact records</h2>
+        {!loading && records.length === 0 ? (
+          <EmptyState title="No impact records yet" description="Submitted records will appear here for verification." />
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-4" aria-live="polite">
             {records.map((r) => (
-              <div key={r.id} className="rounded-lg border border-slate-100 p-3">
+              <article key={r.id} className="rounded-lg border border-slate-100 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className="text-sm font-medium text-slate-700">{r.projectTitle}</p>
@@ -182,19 +298,17 @@ export default function ImpactPage() {
                       <div key={ev.id} className="flex items-center justify-between rounded-lg bg-slate-50 p-2">
                         <div>
                           <p className="text-sm text-slate-600">{ev.description}</p>
-                          <p className="text-xs text-slate-400">
-                            {ev.evidenceType} - by {ev.submittedBy}
-                          </p>
+                          <p className="text-xs text-slate-400">{ev.evidenceType} - by {ev.submittedBy}</p>
                         </div>
                         <div className="flex items-center gap-2">
                           <StatusPill value={ev.status} />
-                          {isReviewer && ev.status !== 'APPROVED' && (
-                            <button className="btn-primary !px-2 !py-1 text-xs" onClick={() => review(ev.id, 'APPROVED')}>
-                              Approve
+                          {isReviewer && ev.status !== 'VERIFIED' && (
+                            <button type="button" className="btn-primary !px-2 !py-1 text-xs" onClick={() => review(ev.id, 'VERIFIED')}>
+                              Verify
                             </button>
                           )}
                           {isReviewer && ev.status !== 'REJECTED' && (
-                            <button className="btn-secondary !px-2 !py-1 text-xs" onClick={() => review(ev.id, 'REJECTED')}>
+                            <button type="button" className="btn-secondary !px-2 !py-1 text-xs" onClick={() => review(ev.id, 'REJECTED')}>
                               Reject
                             </button>
                           )}
@@ -203,7 +317,7 @@ export default function ImpactPage() {
                     ))}
                   </div>
                 )}
-              </div>
+              </article>
             ))}
           </div>
         )}

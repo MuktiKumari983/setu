@@ -29,7 +29,8 @@ public class CurrentUser {
             return false;
         }
         for (String role : roles) {
-            if (auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_" + role))) {
+            if (role != null && auth.getAuthorities().stream()
+                    .anyMatch(a -> a.getAuthority().equals("ROLE_" + role))) {
                 return true;
             }
         }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { notificationApi } from '../api/client'
+import ErrorBanner from '../components/ErrorBanner'
 import StatusPill from '../components/StatusPill'
 import { errorMessage, fmtDateTime } from '../util'
 
@@ -32,25 +33,28 @@ export default function ProfilePage() {
 
       <div className="card grid gap-4 md:grid-cols-3">
         <div>
-          <label className="label">Name</label>
+          <span className="label">Name</span>
           <p className="text-sm font-medium text-slate-700">{user?.name}</p>
         </div>
         <div>
-          <label className="label">Email</label>
+          <span className="label">Email</span>
           <p className="text-sm font-medium text-slate-700">{user?.email}</p>
         </div>
         <div>
-          <label className="label">Role</label>
+          <span className="label">Role</span>
           <p className="text-sm font-medium text-slate-700">{user?.role?.replace('_', ' ')}</p>
         </div>
       </div>
 
-      {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
+      <ErrorBanner message={error} />
 
       <div className="card">
         <h3 className="mb-3 text-sm font-semibold text-slate-700">Notifications</h3>
+        <p className="sr-only" aria-live="polite">
+          {notifications.filter((n) => !n.read).length} unread notifications
+        </p>
         {notifications.length === 0 ? (
-          <p className="text-sm text-slate-400">No notifications yet.</p>
+          <p className="text-sm text-slate-400" aria-live="polite">No notifications yet.</p>
         ) : (
           <ul className="divide-y divide-slate-100">
             {notifications.map((n) => (
@@ -64,7 +68,7 @@ export default function ProfilePage() {
                   <p className="mt-0.5 text-xs text-slate-400">{fmtDateTime(n.createdAt)}</p>
                 </div>
                 {!n.read && (
-                  <button className="btn-secondary !px-2 !py-1 text-xs" onClick={() => markRead(n.id)}>
+                  <button type="button" className="btn-secondary !px-2 !py-1 text-xs" onClick={() => markRead(n.id)}>
                     Mark read
                   </button>
                 )}

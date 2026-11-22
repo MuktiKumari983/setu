@@ -115,7 +115,7 @@ public class LocalAiGateway implements AiGateway {
     }
 
     @Override
-    public AiModels.AnalyzeResult analyze(String title, String description) {
+    public AiModels.AnalyzeResult analyze(String title, String description, String requiredOutcome) {
         String text = (title + " " + description).toLowerCase(Locale.ROOT);
         String category = "General Civic Issue";
         int best = 0;
@@ -157,7 +157,13 @@ public class LocalAiGateway implements AiGateway {
                 + (bestKeywords.isEmpty() ? "no strong category keywords" : String.join(", ", bestKeywords))
                 + ". Required skills derived from the category profile.";
 
-        return new AiModels.AnalyzeResult(category, urgency, skills, keywords, confidence, explanation);
+        List<String> rootCauses = bestKeywords.stream().limit(5).map(k -> "Reported signal: " + k).toList();
+        List<String> challenges = keywords.stream().limit(5).map(k -> "Reported condition: " + k).toList();
+        List<String> solutionDirections = skills.stream().limit(5).map(s -> "Assess capability: " + s).toList();
+        List<String> expectedOutcomes = requiredOutcome == null || requiredOutcome.isBlank()
+                ? List.of() : List.of("Stated outcome: " + requiredOutcome.trim());
+        return new AiModels.AnalyzeResult(category, urgency, skills, keywords, confidence, explanation,
+                rootCauses, List.of(), challenges, solutionDirections, expectedOutcomes, AiModels.AiSource.LOCAL);
     }
 
     @Override
@@ -248,7 +254,7 @@ public class LocalAiGateway implements AiGateway {
         List<AiModels.StakeholderPick> picks = new ArrayList<>();
         addBest(picks, "UNIVERSITY", universities, requirement, match(MatchType.UNIVERSITY, requirement, universities, app),
                 "University research, labs and faculty capacity");
-        addBest(picks, "STUDENT_TEAM", teams, requirement, match(MatchType.TEAM, requirement, teams, app),
+        addBest(picks, "TEAM", teams, requirement, match(MatchType.TEAM, requirement, teams, app),
                 "Student team builds the software & integrations");
         addBest(picks, "MENTOR", mentors, requirement, match(MatchType.MENTOR, requirement, mentors, app),
                 "Domain expertise and academic guidance");
@@ -293,7 +299,7 @@ public class LocalAiGateway implements AiGateway {
         String m = missingCapability == null ? "" : missingCapability.toLowerCase(Locale.ROOT);
         for (var entry : List.of(
                 Map.entry("MENTOR", mentors),
-                Map.entry("STUDENT_TEAM", teams),
+                Map.entry("TEAM", teams),
                 Map.entry("UNIVERSITY", universities),
                 Map.entry("INDUSTRY", industries))) {
             for (AiModels.CandidateProfile c : entry.getValue()) {

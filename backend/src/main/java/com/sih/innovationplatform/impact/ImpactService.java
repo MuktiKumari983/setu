@@ -2,7 +2,9 @@ package com.sih.innovationplatform.impact;
 
 import com.sih.innovationplatform.common.ApiException;
 import com.sih.innovationplatform.common.CurrentUser;
+import com.sih.innovationplatform.common.Roles;
 import com.sih.innovationplatform.project.Project;
+import com.sih.innovationplatform.project.ProjectAccessService;
 import com.sih.innovationplatform.project.ProjectRepository;
 import com.sih.innovationplatform.user.User;
 import com.sih.innovationplatform.user.UserRepository;
@@ -22,9 +24,11 @@ public class ImpactService {
     private final ProjectRepository projectRepo;
     private final UserRepository userRepo;
     private final CurrentUser currentUser;
+    private final ProjectAccessService projectAccessService;
 
     @Transactional
     public ImpactDtos.ImpactResult submit(Long projectId, ImpactDtos.SubmitRequest req, Long userId) {
+        projectAccessService.requireMemberOrAdmin(projectId, userId);
         Project project = projectRepo.findById(projectId)
                 .orElseThrow(() -> ApiException.notFound("Project not found"));
         User user = userRepo.findById(userId).orElseThrow();
@@ -46,6 +50,7 @@ public class ImpactService {
 
     @Transactional
     public ImpactDtos.ImpactResult addEvidence(Long projectId, ImpactDtos.EvidenceRequest req, Long userId) {
+        projectAccessService.requireMemberOrAdmin(projectId, userId);
         ImpactRecord rec = recordRepo.findById(req.impactRecordId())
                 .orElseThrow(() -> ApiException.notFound("Impact record not found"));
         if (!rec.getProject().getId().equals(projectId)) {
@@ -65,7 +70,7 @@ public class ImpactService {
 
     @Transactional
     public ImpactDtos.ImpactResult reviewEvidence(Long evidenceId, ImpactDtos.ReviewRequest req, Long reviewerId) {
-        if (!currentUser.hasAnyRole("PLATFORM_ADMIN", "GOVERNMENT_ADMIN")) {
+        if (!currentUser.hasAnyRole(Roles.PLATFORM_ADMINS)) {
             throw ApiException.forbidden("Only admins can review evidence");
         }
         ImpactEvidence ev = evidenceRepo.findById(evidenceId)

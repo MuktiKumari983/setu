@@ -1,6 +1,6 @@
 services:
   mysql:
-    image: mysql:8.0.33
+    image: mysql:8.4
     container_name: sih_mysql
     restart: unless-stopped
     environment:
@@ -12,7 +12,6 @@ services:
       - "3307:3306"
     volumes:
       - mysql-data:/var/lib/mysql
-      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD:-root_password}"]
       interval: 5s
@@ -26,7 +25,7 @@ services:
     container_name: sih_ai_service
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 5s
@@ -40,19 +39,23 @@ services:
     container_name: sih_backend
     restart: unless-stopped
     environment:
-      DB_HOST: ${DB_HOST:-mysql}
-      DB_PORT: ${DB_PORT:-3306}
-      DB_NAME: ${DB_NAME:-sih_platform}
+      DB_URL: ${DB_URL:-jdbc:mysql://mysql:3306/sih_platform?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
       DB_USERNAME: ${DB_USERNAME:-sih}
       DB_PASSWORD: ${DB_PASSWORD:-sih_password}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me-please-32-characters-minimum}
+      JWT_ALLOW_DEV_SECRET: ${JWT_ALLOW_DEV_SECRET:-true}
       JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
+      APP_SEED_ENABLED: ${APP_SEED_ENABLED:-true}
       AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai-service:8000}
       AI_ENABLED: ${AI_ENABLED:-true}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173}
-      SPRING_PROFILES_ACTIVE: docker
     ports:
       - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
     depends_on:
       mysql:
         condition: service_healthy
@@ -64,13 +67,14 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        VITE_API_BASE_URL: /api
+        VITE_API_BASE_URL: ""
     container_name: sih_frontend
     restart: unless-stopped
     ports:
       - "5173:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   mysql-data:

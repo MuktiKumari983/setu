@@ -15,6 +15,7 @@ import {
   Line,
 } from 'recharts'
 import { dashboardApi } from '../api/client'
+import ErrorBanner from '../components/ErrorBanner'
 import StatCard from '../components/StatCard'
 import { errorMessage } from '../util'
 
@@ -31,8 +32,8 @@ export default function AnalyticsPage() {
       .catch((e) => setError(errorMessage(e)))
   }, [])
 
-  if (error) return <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>
-  if (!data) return <p className="text-sm text-slate-500">Loading analytics...</p>
+  if (error) return <ErrorBanner message={error} />
+  if (!data) return <p className="text-sm text-slate-500" aria-live="polite">Loading analytics...</p>
 
   const byCategory = Object.entries(data.byCategory || {}).map(([name, value]) => ({ name, value }))
   const byStatus = Object.entries(data.byStatus || {}).map(([name, value]) => ({ name, value }))
@@ -59,6 +60,9 @@ export default function AnalyticsPage() {
       <div className="grid gap-5 lg:grid-cols-2">
         <div className="card">
           <h3 className="mb-3 text-sm font-semibold text-slate-700">Challenges by category</h3>
+          <p className="sr-only">
+            Challenges by category: {byCategory.map(({ name, value }) => `${name}: ${value}`).join(', ') || 'none'}
+          </p>
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={byCategory}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -72,6 +76,9 @@ export default function AnalyticsPage() {
 
         <div className="card">
           <h3 className="mb-3 text-sm font-semibold text-slate-700">Challenges by lifecycle status</h3>
+          <p className="sr-only">
+            Challenges by lifecycle status: {byStatus.map(({ name, value }) => `${name}: ${value}`).join(', ') || 'none'}
+          </p>
           <ResponsiveContainer width="100%" height={260}>
             <PieChart>
               <Pie data={byStatus} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label={(e) => `${e.name}:${e.value}`} labelLine={false}>
@@ -87,6 +94,9 @@ export default function AnalyticsPage() {
 
         <div className="card">
           <h3 className="mb-3 text-sm font-semibold text-slate-700">Projects by stage (pipeline)</h3>
+          <p className="sr-only">
+            Projects by stage: {projectsByStatus.map(({ name, value }) => `${name}: ${value}`).join(', ') || 'none'}
+          </p>
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={projectsByStatus}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -100,6 +110,9 @@ export default function AnalyticsPage() {
 
         <div className="card">
           <h3 className="mb-3 text-sm font-semibold text-slate-700">University participation</h3>
+          <p className="sr-only">
+            University participation: {universityParticipation.map(({ name, value }) => `${name}: ${value}`).join(', ') || 'none'}
+          </p>
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={universityParticipation}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />

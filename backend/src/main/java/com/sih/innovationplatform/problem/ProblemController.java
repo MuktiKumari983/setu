@@ -2,6 +2,7 @@ package com.sih.innovationplatform.problem;
 
 import com.sih.innovationplatform.common.CurrentUser;
 import com.sih.innovationplatform.user.User;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,7 +18,7 @@ public class ProblemController {
     private final CurrentUser currentUser;
 
     @PostMapping
-    public ProblemResponse create(@RequestBody ProblemCreateRequest request) {
+    public ProblemResponse create(@Valid @RequestBody ProblemCreateRequest request) {
         User user = currentUser.get();
         return problemService.create(request, user.getId());
     }
@@ -37,14 +38,15 @@ public class ProblemController {
 
     @PutMapping("/{id}")
     public ProblemResponse update(@PathVariable Long id,
-                                  @RequestBody ProblemUpdateRequest request) {
+                                  @Valid @RequestBody ProblemUpdateRequest request) {
         User user = currentUser.get();
         return problemService.update(id, request, user.getId());
     }
 
     @PostMapping("/{id}/analyze")
     public ProblemResponse analyze(@PathVariable Long id) {
-        problemService.runAnalysis(id);
+        User user = currentUser.get();
+        problemService.runAnalysis(id, user.getId());
         return problemService.get(id);
     }
 

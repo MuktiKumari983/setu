@@ -1,15 +1,11 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import ErrorBanner from '../components/ErrorBanner'
+import FormField from '../components/FormField'
 import { errorMessage } from '../util'
 
-const ROLES = [
-  'CITIZEN',
-  'STUDENT',
-  'FACULTY',
-  'UNIVERSITY_ADMIN',
-  'INDUSTRY',
-]
+const ROLES = ['CITIZEN', 'STUDENT', 'FACULTY', 'UNIVERSITY_ADMIN', 'INDUSTRY']
 
 export default function RegisterPage() {
   const { register } = useAuth()
@@ -41,45 +37,56 @@ export default function RegisterPage() {
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-8">
       <div className="w-full max-w-md">
         <div className="mb-6 text-center">
-          <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-brand-600 text-xl font-bold text-white">
+          <Link to="/" className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-brand-600 text-xl font-bold text-white" aria-label="Setu home">
             S
-          </span>
+          </Link>
           <h1 className="text-xl font-semibold text-slate-800">Create an account</h1>
         </div>
 
         <div className="card">
-          {error && <p className="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
+          <ErrorBanner message={error} />
           <form onSubmit={submit} className="space-y-4">
-            <div>
-              <label className="label">Full name</label>
-              <input className="input" value={form.name} onChange={update('name')} required />
-            </div>
-            <div>
-              <label className="label">Email</label>
-              <input className="input" type="email" value={form.email} onChange={update('email')} required />
-            </div>
-            <div>
-              <label className="label">Password (min 6 chars)</label>
-              <input className="input" type="password" value={form.password} onChange={update('password')} minLength={6} required />
-            </div>
-            <div>
-              <label className="label">Phone (optional)</label>
-              <input className="input" value={form.phone} onChange={update('phone')} />
-            </div>
-            <div>
-              <label className="label">Role</label>
-              <select className="input" value={form.role} onChange={update('role')}>
+            <FormField id="register-name" label="Full name">
+              <input id="register-name" className="input" autoComplete="name" autoFocus value={form.name} onChange={update('name')} required />
+            </FormField>
+            <FormField id="register-email" label="Email">
+              <input id="register-email" className="input" type="email" autoComplete="email" value={form.email} onChange={update('email')} required />
+            </FormField>
+            <FormField id="register-password" label="Password" hint="Use at least 6 characters.">
+              <input
+                id="register-password"
+                className="input"
+                type="password"
+                autoComplete="new-password"
+                value={form.password}
+                onChange={update('password')}
+                minLength={6}
+                aria-describedby="register-password-hint"
+                required
+              />
+            </FormField>
+            <FormField id="register-phone" label="Phone (optional)">
+              <input id="register-phone" className="input" autoComplete="tel" value={form.phone} onChange={update('phone')} />
+            </FormField>
+            <FormField id="register-role" label="Role">
+              <select id="register-role" className="input" value={form.role} onChange={update('role')}>
                 {ROLES.map((r) => (
                   <option key={r} value={r}>
                     {r.replace('_', ' ')}
                   </option>
                 ))}
               </select>
-            </div>
-            <div>
-              <label className="label">University ID (optional)</label>
-              <input className="input" type="number" value={form.universityId} onChange={update('universityId')} placeholder="Only for faculty / students" />
-            </div>
+            </FormField>
+            <FormField id="register-university" label="University ID (optional)" hint="Only for faculty, students, and university administrators.">
+              <input
+                id="register-university"
+                className="input"
+                type="number"
+                value={form.universityId}
+                onChange={update('universityId')}
+                aria-describedby="register-university-hint"
+              />
+            </FormField>
             <button className="w-full btn-primary" disabled={busy}>
               {busy ? 'Creating...' : 'Register'}
             </button>

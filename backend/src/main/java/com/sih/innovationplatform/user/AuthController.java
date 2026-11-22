@@ -8,6 +8,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -44,5 +45,12 @@ public class AuthController {
     @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','GOVERNMENT_ADMIN')")
     public AuthService.UserDto userById(@PathVariable Long id) {
         return authService.me(id);
+    }
+
+    @PutMapping("/users/{id}/role")
+    @PreAuthorize("hasAnyRole('PLATFORM_ADMIN','GOVERNMENT_ADMIN')")
+    public AuthService.UserDto assignRole(@PathVariable Long id,
+                                          @Valid @RequestBody AuthService.RoleAssignRequest request) {
+        return authService.assignRole(id, request.role());
     }
 }

@@ -206,7 +206,15 @@ def score_candidate(requirement: dict, candidate: dict) -> dict:
         desc_sim = cosine(req_vec, c_vec)
     factors.append((desc_sim * 0.8, "Description relevance"))
 
-    weights = [0.40, 0.25, 0.15, 0.20]
+    availability_signal = 1.0 if str(candidate.get("availability") or "").strip() else 0.0
+    factors.append((availability_signal, "Availability recorded"))
+
+    experience_text = " ".join(str(v) for v in (candidate.get("experience") or []))
+    experience_query = " ".join(req_kw) or " ".join(req_skills)
+    exp_sim = cosine(tf_vector(experience_query), tf_vector(experience_text)) if experience_query else 0.0
+    factors.append((exp_sim, "Relevant experience"))
+
+    weights = [0.35, 0.20, 0.12, 0.15, 0.08, 0.10]
     score = sum(w * f for (f, _), w in zip(factors, weights))
     score = max(0.0, min(0.99, round(score, 4)))
 
@@ -220,6 +228,10 @@ def score_candidate(requirement: dict, candidate: dict) -> dict:
         explanation_parts.append("domain tags overlap")
     if desc_sim > 0.2:
         explanation_parts.append("description references the problem domain")
+    if exp_sim > 0.2:
+        explanation_parts.append("experience references the problem domain")
+    if availability_signal > 0:
+        explanation_parts.append("availability is recorded")
     if not explanation_parts:
         explanation_parts.append("limited signal available")
     explanation = str(candidate.get("name") or "Candidate") + " — " + "; ".join(explanation_parts) + "."

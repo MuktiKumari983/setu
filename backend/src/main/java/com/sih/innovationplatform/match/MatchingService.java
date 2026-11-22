@@ -3,6 +3,9 @@ package com.sih.innovationplatform.match;
 import com.sih.innovationplatform.ai.AiGateway;
 import com.sih.innovationplatform.ai.AiModels;
 import com.sih.innovationplatform.ai.MatchType;
+import com.sih.innovationplatform.common.ApiException;
+import com.sih.innovationplatform.common.CurrentUser;
+import com.sih.innovationplatform.common.Roles;
 import com.sih.innovationplatform.config.AppProperties;
 import com.sih.innovationplatform.industry.Industry;
 import com.sih.innovationplatform.industry.IndustryRepository;
@@ -24,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -39,11 +43,13 @@ public class MatchingService {
     private final MatchRepository matchRepo;
     private final AiGateway aiGateway;
     private final AppProperties appProperties;
+    private final CurrentUser currentUser;
 
     @Transactional
-    public List<MatchDto> runMatching(Long problemId) {
+    public List<MatchDto> runMatching(Long problemId, Long userId) {
         Problem problem = problemRepo.findById(problemId)
-                .orElseThrow(() -> com.sih.innovationplatform.common.ApiException.notFound("Problem not found"));
+                .orElseThrow(() -> ApiException.notFound("Problem not found"));
+        requireProblemOwnerOrAdmin(problem, userId);
         AiModels.MatchingRequirement requirement = requirement(problem);
 
         List<MatchDto> result = new ArrayList<>();
@@ -52,7 +58,7 @@ public class MatchingService {
             for (AiModels.ScoredMatch s : scores) {
                 upsert(problemId, type.name(), s);
                 result.add(new MatchDto(type.name(), s.id(), resolveName(type.name(), s.id()), s.score(),
-                        s.explanation(), s.contributingFactors(), "PROPOSED"));
+                        s.explanation(), s.contributingFactors(), "PROPOSED", s.source().name()));
             }
         }
         if (Problem.STATUS_VERIFIED.equals(problem.getStatus())) {
@@ -70,9 +76,10 @@ public class MatchingService {
     }
 
     @Transactional
-    public AiModels.Recommendation recommend(Long problemId) {
+    public AiModels.Recommendation recommend(Long problemId, Long userId) {
         Problem problem = problemRepo.findById(problemId)
-                .orElseThrow(() -> com.sih.innovationplatform.common.ApiException.notFound("Problem not found"));
+                .orElseThrow(() -> ApiException.notFound("Problem not found"));
+        requireProblemOwnerOrAdmin(problem, userId);
         AiModels.MatchingRequirement requirement = requirement(problem);
         AiModels.Recommendation rec = aiGateway.recommend(
                 requirement,
@@ -82,9 +89,9 @@ public class MatchingService {
                 candidates(MatchType.INDUSTRY),
                 appProperties);
         for (AiModels.StakeholderPick pick : rec.stakeholders()) {
-            String type = pick.type().equals("STUDENT_TEAM") ? "TEAM" : pick.type();
+            String type = normalizeMatchType(pick.type());
             upsert(problemId, type, pick.id(), Math.round(pick.score() * 100.0) / 100.0,
-                    pick.reason(), List.of());
+                    pick.reason(), List.of(), rec.source().name());
         }
         if (Problem.STATUS_VERIFIED.equals(problem.getStatus())) {
             problem.setStatus(Problem.STATUS_MATCHED);
@@ -93,9 +100,10 @@ public class MatchingService {
         return rec;
     }
 
-    public AiModels.RecoveryRecommendation recovery(Long problemId, String missingCapability) {
+    public AiModels.RecoveryRecommendation recovery(Long problemId, String missingCapability, Long userId) {
         Problem problem = problemRepo.findById(problemId)
-                .orElseThrow(() -> com.sih.innovationplatform.common.ApiException.notFound("Problem not found"));
+                .orElseThrow(() -> ApiException.notFound("Problem not found"));
+        requireProblemOwnerOrAdmin(problem, userId);
         AiModels.MatchingRequirement requirement = requirement(problem);
         return aiGateway.recover(
                 missingCapability,
@@ -123,7 +131,8 @@ public class MatchingService {
         if (u.getDescription() != null) {
             tags.add(u.getDescription());
         }
-        return new AiModels.CandidateProfile(u.getId(), u.getName(), u.getDescription(), depts, tags, depts);
+        return new AiModels.CandidateProfile(u.getId(), u.getName(), u.getDescription(), depts, tags, depts,
+                "", List.of());
     }
 
     private AiModels.CandidateProfile teamProfile(StudentTeam t) {
@@ -133,8 +142,9 @@ public class MatchingService {
         tags.addAll(csv(t.getPreviousProjects()));
         tags.add(t.getName());
         return new AiModels.CandidateProfile(t.getId(), t.getName(),
-                (t.getDescription() == null ? "" : t.getDescription()) + " " + t.getAvailability(),
-                skills, tags, csv(t.getTechnologies()));
+                t.getDescription() == null ? "" : t.getDescription(),
+                skills, tags, csv(t.getTechnologies()),
+                t.getAvailability() == null ? "" : t.getAvailability(), csv(t.getPreviousProjects()));
     }
 
     private AiModels.CandidateProfile mentorProfile(Faculty f) {
@@ -144,8 +154,12 @@ public class MatchingService {
         tags.addAll(csv(f.getPreviousProjects()));
         if (f.getDepartment() != null) tags.add(f.getDepartment().getName());
         if (f.getTitle() != null) tags.add(f.getTitle());
+        List<String> experience = new ArrayList<>(csv(f.getPreviousProjects()));
+        if (f.getResearchArea() != null && !f.getResearchArea().isBlank()) {
+            experience.add(f.getResearchArea());
+        }
         return new AiModels.CandidateProfile(f.getId(), f.getName(),
-                f.getResearchArea(), skills, tags, skills);
+                f.getResearchArea(), skills, tags, skills, "", experience);
     }
 
     private AiModels.CandidateProfile industryProfile(Industry i) {
@@ -158,7 +172,11 @@ public class MatchingService {
         if (i.getMentorship() != null) tags.add(i.getMentorship());
         if (i.getTestingCapability() != null) tags.add(i.getTestingCapability());
         if (i.getDeploymentCapability() != null) tags.add(i.getDeploymentCapability());
-        return new AiModels.CandidateProfile(i.getId(), i.getName(), i.getDescription(), skills, tags, csv(i.getExpertise()));
+        List<String> experience = new ArrayList<>(csv(i.getExpertise()));
+        experience.addAll(csv(i.getTestingCapability()));
+        experience.addAll(csv(i.getDeploymentCapability()));
+        return new AiModels.CandidateProfile(i.getId(), i.getName(), i.getDescription(), skills, tags,
+                csv(i.getExpertise()), "", experience);
     }
 
     public AiModels.MatchingRequirement requirement(Problem p) {
@@ -172,11 +190,11 @@ public class MatchingService {
     }
 
     private void upsert(Long problemId, String type, AiModels.ScoredMatch s) {
-        upsert(problemId, type, s.id(), s.score(), s.explanation(), s.contributingFactors());
+        upsert(problemId, type, s.id(), s.score(), s.explanation(), s.contributingFactors(), s.source().name());
     }
 
     private void upsert(Long problemId, String type, Long entityId, double score, String explanation,
-                        List<String> contributingFactors) {
+                        List<String> contributingFactors, String source) {
         Problem problem = problemRepo.findById(problemId).orElse(null);
         Match match = matchRepo.findByProblemIdAndEntityTypeAndEntityId(problemId, type, entityId)
                 .orElseGet(Match::new);
@@ -186,6 +204,7 @@ public class MatchingService {
         match.setScore(score);
         match.setExplanation(explanation);
         match.setContributingFactors(String.join(" | ", contributingFactors));
+        match.setSource(source);
         if (match.getId() == null) {
             match.setStatus("PROPOSED");
         }
@@ -197,7 +216,7 @@ public class MatchingService {
                 m.getScore(), m.getExplanation(),
                 Arrays.stream((m.getContributingFactors() == null ? "" : m.getContributingFactors()).split("\\|"))
                         .map(String::trim).filter(s -> !s.isBlank()).toList(),
-                m.getStatus());
+                m.getStatus(), m.getSource());
     }
 
     private String resolveName(String type, Long id) {
@@ -212,6 +231,20 @@ public class MatchingService {
         } catch (Exception e) {
             return "—";
         }
+    }
+
+    private void requireProblemOwnerOrAdmin(Problem problem, Long userId) {
+        if (currentUser.hasAnyRole(Roles.PROBLEM_ADMINS)) {
+            return;
+        }
+        if (problem.getSubmitter() == null || !problem.getSubmitter().getId().equals(userId)) {
+            throw ApiException.forbidden("Only the problem owner can run matching");
+        }
+    }
+
+    static String normalizeMatchType(String raw) {
+        String type = raw == null ? "" : raw.trim().toUpperCase(Locale.ROOT);
+        return "STUDENT_TEAM".equals(type) ? "TEAM" : type;
     }
 
     static List<String> csv(String s) {

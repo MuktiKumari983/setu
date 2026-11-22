@@ -14,14 +14,31 @@ import java.util.Date;
 @Service
 public class JwtService {
 
+    private static final String DEV_SECRET = "dev-secret-change-me-please-32-characters-minimum";
+
     private final SecretKey key;
     private final long expirationMs;
 
     public JwtService(@Value("${app.jwt.secret}") String secret,
-                      @Value("${app.jwt.expiration-ms}") long expirationMs) {
-        byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+                      @Value("${app.jwt.expiration-ms}") long expirationMs,
+                      @Value("${app.jwt.allow-dev-secret:false}") boolean allowDevSecret) {
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException("JWT_SECRET must be configured");
+        }
+        if (DEV_SECRET.equals(secret) && !allowDevSecret) {
+            throw new IllegalStateException("JWT_SECRET must be changed from the development default");
+        }
+        byte[] keyBytes;
+        try {
+            keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+            if (keyBytes.length < 32) {
+                keyBytes = Decoders.BASE64.decode(secret);
+            }
+        } catch (Exception ex) {
+            throw new IllegalStateException("JWT_SECRET must be at least 32 bytes", ex);
+        }
         if (keyBytes.length < 32) {
-            keyBytes = Decoders.BASE64.decode(secret);
+            throw new IllegalStateException("JWT_SECRET must be at least 32 bytes");
         }
         this.key = Keys.hmacShaKeyFor(keyBytes);
         this.expirationMs = expirationMs;

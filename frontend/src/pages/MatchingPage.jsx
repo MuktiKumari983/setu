@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { matchingApi, problemApi } from '../api/client'
+import { aiSourceLabel, asList } from '../api/contract'
+import ErrorBanner from '../components/ErrorBanner'
 import ScoreMeter from '../components/ScoreMeter'
 import { errorMessage } from '../util'
 
@@ -28,7 +30,6 @@ export default function MatchingPage() {
       setProblemId(routeId)
       load(routeId)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeId])
 
   async function load(pid) {
@@ -97,8 +98,8 @@ export default function MatchingPage() {
 
       <div className="card flex flex-wrap items-end gap-3">
         <div className="min-w-64 flex-1">
-          <label className="label">Select a challenge</label>
-          <select className="input" value={problemId} onChange={(e) => setProblemId(e.target.value)}>
+          <label className="label" htmlFor="matching-challenge">Select a challenge</label>
+          <select id="matching-challenge" className="input" value={problemId} onChange={(e) => setProblemId(e.target.value)}>
             <option value="">Choose...</option>
             {problems.map((p) => (
               <option key={p.id} value={p.id}>
@@ -107,26 +108,26 @@ export default function MatchingPage() {
             ))}
           </select>
         </div>
-        <button className="btn-primary" onClick={() => load(problemId)} disabled={busy || !problemId}>
+        <button type="button" className="btn-primary" onClick={() => load(problemId)} disabled={busy || !problemId}>
           Load
         </button>
-        <button className="btn-primary" onClick={runMatching} disabled={busy || !problemId}>
+        <button type="button" className="btn-primary" onClick={runMatching} disabled={busy || !problemId}>
           Run matching
         </button>
-        <button className="btn-primary" onClick={runRecommendation} disabled={busy || !problemId}>
+        <button type="button" className="btn-primary" onClick={runRecommendation} disabled={busy || !problemId}>
           Recommend
         </button>
       </div>
 
-      {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
+      <ErrorBanner message={error} />
 
       {problem && (
         <div className="card">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-lg font-semibold text-slate-800">{problem.title}</p>
-              <p className="text-xs text-slate-500">
-                Satisfies required skills: {(problem.aiSkills || []).join(', ') || 'analyzed after submit'}
+              <p className="text-xs text-slate-500" aria-live="polite">
+                Satisfies required skills: {asList(problem.aiSkills).join(', ') || 'analyzed after submit'}
               </p>
             </div>
             <Link to={`/challenges/${problem.id}`} className="text-sm text-brand-600 hover:underline">
@@ -142,7 +143,7 @@ export default function MatchingPage() {
             <div key={group} className="card">
               <h3 className="mb-3 text-sm font-semibold text-slate-700">{group.replace('_', ' ').toLowerCase()}</h3>
               {list.length === 0 ? (
-                <p className="text-xs text-slate-400">No candidates of this type.</p>
+                <p className="text-xs text-slate-400" aria-live="polite">No candidates of this type.</p>
               ) : (
                 <ul className="space-y-2">
                   {list.map((m) => (
@@ -152,6 +153,9 @@ export default function MatchingPage() {
                         <ScoreMeter score={m.score} />
                       </div>
                       <p className="mt-1 text-xs text-slate-500">{m.explanation}</p>
+                      <p className="mt-1 text-[10px] uppercase tracking-wide text-slate-400">
+                        {aiSourceLabel(m.source)}
+                      </p>
                       <p className="mt-1.5 flex flex-wrap gap-1.5">
                         {(m.contributingFactors || []).slice(0, 4).map((f) => (
                           <span key={f} className="rounded bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">
@@ -171,7 +175,10 @@ export default function MatchingPage() {
       {recommendation && (
         <div className="card border-brand-200 bg-brand-50/40">
           <h3 className="text-sm font-semibold text-slate-700">Recommended stakeholder team</h3>
-          <p className="mt-1 text-xs text-brand-800">{recommendation.narrative}</p>
+          <p className="mt-1 text-xs text-brand-800" aria-live="polite">{recommendation.narrative}</p>
+          <p className="mt-1 text-[10px] uppercase tracking-wide text-brand-500">
+            {aiSourceLabel(recommendation.source)}
+          </p>
           <div className="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
             {recommendation.stakeholders?.map((s) => (
               <div key={`${s.type}-${s.id}`} className="rounded-lg border border-brand-100 bg-white p-3">
@@ -192,24 +199,29 @@ export default function MatchingPage() {
 
       <div className="card">
         <h3 className="mb-2 text-sm font-semibold text-slate-700">Failure recovery</h3>
-        <p className="mb-3 text-xs text-slate-500">
+        <p id="recovery-help" className="mb-3 text-xs text-slate-500">
           If a pilot stalled because a capability is missing, ask the platform to find who can close the gap.
         </p>
         <div className="flex gap-2">
           <input
             className="input max-w-sm"
+            aria-label="Missing capability"
+            aria-describedby="recovery-help"
             placeholder="Missing capability, e.g. GIS"
             value={missingCapability}
             onChange={(e) => setMissingCapability(e.target.value)}
           />
-          <button className="btn-secondary" onClick={runRecovery} disabled={busy || !problemId || !missingCapability.trim()}>
+          <button type="button" className="btn-secondary" onClick={runRecovery} disabled={busy || !problemId || !missingCapability.trim()}>
             Find recovery partners
           </button>
         </div>
 
         {recovery && (
           <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
-            <p className="text-xs text-amber-800">{recovery.narrative}</p>
+            <p className="text-xs text-amber-800" aria-live="polite">{recovery.narrative}</p>
+            <p className="mt-1 text-[10px] uppercase tracking-wide text-amber-600">
+              {aiSourceLabel(recovery.source)}
+            </p>
             <ul className="mt-3 space-y-2">
               {recovery.recommendations?.map((r, i) => (
                 <li key={`${r.id}-${i}`} className="flex items-center justify-between rounded-lg bg-white p-2.5">

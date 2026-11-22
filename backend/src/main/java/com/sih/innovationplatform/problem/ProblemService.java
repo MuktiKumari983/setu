@@ -4,6 +4,7 @@ import com.sih.innovationplatform.ai.AiGateway;
 import com.sih.innovationplatform.ai.AiModels;
 import com.sih.innovationplatform.common.ApiException;
 import com.sih.innovationplatform.common.CurrentUser;
+import com.sih.innovationplatform.common.Roles;
 import com.sih.innovationplatform.user.User;
 import com.sih.innovationplatform.user.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -48,22 +49,35 @@ public class ProblemService {
         problem.setStatus(Problem.STATUS_SUBMITTED);
 
         Problem saved = problemRepo.save(problem);
-        runAnalysis(saved.getId());
+        runAnalysis(saved.getId(), userId);
         return get(saved.getId());
     }
 
     @Transactional
     public void runAnalysis(Long problemId) {
+        runAnalysis(problemId, currentUser.get().getId());
+    }
+
+    @Transactional
+    public void runAnalysis(Long problemId, Long userId) {
         Problem problem = problemRepo.findById(problemId)
                 .orElseThrow(() -> ApiException.notFound("Problem not found"));
+        requireSubmitterOrAdmin(problem, userId);
 
-        AiModels.AnalyzeResult analysis = aiGateway.analyze(problem.getTitle(), problem.getDescription());
+        AiModels.AnalyzeResult analysis = aiGateway.analyze(
+                problem.getTitle(), problem.getDescription(), problem.getRequiredOutcome());
         problem.setAiCategory(analysis.category());
         problem.setAiUrgency(analysis.urgency());
         problem.setAiSkills(String.join(", ", analysis.requiredSkills()));
         problem.setAiKeywords(String.join(", ", analysis.keywords()));
         problem.setAiConfidence(analysis.confidence());
         problem.setAiExplanation(analysis.explanation());
+        problem.setAiRootCauses(String.join(", ", analysis.rootCauses()));
+        problem.setAiTargetBeneficiaries(String.join(", ", analysis.targetBeneficiaries()));
+        problem.setAiChallenges(String.join(", ", analysis.challenges()));
+        problem.setAiSolutionDirections(String.join(", ", analysis.solutionDirections()));
+        problem.setAiExpectedOutcomes(String.join(", ", analysis.expectedOutcomes()));
+        problem.setAiSource(analysis.source().name());
         if (problem.getUrgency() == null || "MEDIUM".equals(problem.getUrgency())) {
             problem.setUrgency(analysis.urgency());
         }
@@ -130,7 +144,7 @@ public class ProblemService {
     @Transactional
     public ProblemResponse update(Long id, ProblemUpdateRequest req, Long userId) {
         Problem p = problemRepo.findById(id).orElseThrow(() -> ApiException.notFound("Problem not found"));
-        if (!p.getSubmitter().getId().equals(userId) && !currentUser.hasAnyRole("PLATFORM_ADMIN", "GOVERNMENT_ADMIN")) {
+        if (!p.getSubmitter().getId().equals(userId) && !currentUser.hasAnyRole(Roles.PLATFORM_ADMINS)) {
             throw ApiException.forbidden("Only the submitter or an admin can edit this problem");
         }
         if (req.title() != null) p.setTitle(req.title().trim());
@@ -146,7 +160,7 @@ public class ProblemService {
 
     @Transactional
     public void verify(Long id) {
-        if (!currentUser.hasAnyRole("PLATFORM_ADMIN", "GOVERNMENT_ADMIN", "UNIVERSITY_ADMIN")) {
+        if (!currentUser.hasAnyRole(Roles.PROBLEM_ADMINS)) {
             throw ApiException.forbidden("Only admins can verify challenges");
         }
         Problem p = problemRepo.findById(id).orElseThrow(() -> ApiException.notFound("Problem not found"));
@@ -159,7 +173,7 @@ public class ProblemService {
 
     @Transactional
     public void merge(Long id, Long targetId) {
-        if (!currentUser.hasAnyRole("PLATFORM_ADMIN", "GOVERNMENT_ADMIN", "UNIVERSITY_ADMIN")) {
+        if (!currentUser.hasAnyRole(Roles.PROBLEM_ADMINS)) {
             throw ApiException.forbidden("Only admins can merge challenges");
         }
         Problem p = problemRepo.findById(id).orElseThrow(() -> ApiException.notFound("Problem not found"));
@@ -188,6 +202,16 @@ public class ProblemService {
         return capabilityRepo.findByProblemId(id);
     }
 
+    private void requireSubmitterOrAdmin(Problem problem, Long userId) {
+        if (problem.getSubmitter() != null && problem.getSubmitter().getId().equals(userId)) {
+            return;
+        }
+        if (currentUser.hasAnyRole(Roles.PROBLEM_ADMINS)) {
+            return;
+        }
+        throw ApiException.forbidden("Only the submitter or an admin can re-run analysis for this problem");
+    }
+
     private ProblemResponse toResponse(Problem p) {
         if (p == null) {
             return null;
@@ -202,6 +226,8 @@ public class ProblemService {
                 p.getRequiredOutcome(), p.getDocumentUrl(), p.getStatus(),
                 p.getAiCategory(), p.getAiUrgency(), p.getAiConfidence(),
                 p.getAiSkills(), p.getAiKeywords(), p.getAiExplanation(),
+                p.getAiRootCauses(), p.getAiTargetBeneficiaries(), p.getAiChallenges(),
+                p.getAiSolutionDirections(), p.getAiExpectedOutcomes(), p.getAiSource(),
                 p.getAiSimilarity(),
                 p.getSimilarProblem() != null
                         ? new ProblemResponse.DuplicateBrief(p.getSimilarProblem().getId(), p.getSimilarProblem().getTitle(), p.getAiSimilarity())

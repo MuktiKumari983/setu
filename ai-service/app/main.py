@@ -7,6 +7,7 @@ from FastAPI/Pydantic so the container stays tiny.
 
 import logging
 import os
+from typing import Any, Literal
 
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
@@ -23,66 +24,200 @@ logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(title="SIH Citizen Innovation - AI service", version="1.0.0")
 
+EntityType = Literal["UNIVERSITY", "TEAM", "MENTOR", "INDUSTRY"]
+Urgency = Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+RemoteSource = Literal["REMOTE"]
+
 
 class AnalyzeRequest(BaseModel):
-    title: str
-    description: str
+    title: str = Field(min_length=1, max_length=250)
+    description: str = Field(min_length=1, max_length=10000)
+    requiredOutcome: str = Field(default="", max_length=1000)
 
 
 class ExistingProblem(BaseModel):
-    id: int
-    title: str
-    description: str = ""
+    id: int = Field(gt=0)
+    title: str = Field(min_length=1, max_length=250)
+    description: str = Field(default="", max_length=10000)
 
 
 class DuplicatesRequest(BaseModel):
-    title: str
-    description: str
-    existingProblems: list[ExistingProblem] = []
+    title: str = Field(min_length=1, max_length=250)
+    description: str = Field(min_length=1, max_length=10000)
+    existingProblems: list[ExistingProblem] = Field(default_factory=list, max_length=100)
 
 
 class DecomposeRequest(BaseModel):
-    title: str
-    description: str
-    skills: list[str] = []
+    title: str = Field(min_length=1, max_length=250)
+    description: str = Field(min_length=1, max_length=10000)
+    skills: list[str] = Field(default_factory=list, max_length=50)
 
 
 class CandidateProfile(BaseModel):
-    id: int
-    name: str
-    description: str = ""
-    skills: list[str] = []
-    tags: list[str] = []
-    capabilities: list[str] = []
+    id: int = Field(gt=0)
+    name: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=2000)
+    skills: list[str] = Field(default_factory=list, max_length=50)
+    tags: list[str] = Field(default_factory=list, max_length=50)
+    capabilities: list[str] = Field(default_factory=list, max_length=50)
+    availability: str = Field(default="", max_length=200)
+    experience: list[str] = Field(default_factory=list, max_length=50)
 
 
 class Requirement(BaseModel):
-    category: str = ""
-    keywords: list[str] = []
-    requiredSkills: list[str] = []
-    capabilities: list[str] = []
+    category: str = Field(default="", max_length=150)
+    keywords: list[str] = Field(default_factory=list, max_length=50)
+    requiredSkills: list[str] = Field(default_factory=list, max_length=50)
+    capabilities: list[str] = Field(default_factory=list, max_length=50)
 
 
 class MatchRequest(BaseModel):
     requirement: Requirement
-    candidates: list[CandidateProfile] = []
+    candidates: list[CandidateProfile] = Field(default_factory=list, max_length=500)
 
 
 class RecommendRequest(BaseModel):
     requirement: Requirement
-    universities: list[CandidateProfile] = []
-    teams: list[CandidateProfile] = []
-    mentors: list[CandidateProfile] = []
-    industries: list[CandidateProfile] = []
+    universities: list[CandidateProfile] = Field(default_factory=list, max_length=200)
+    teams: list[CandidateProfile] = Field(default_factory=list, max_length=200)
+    mentors: list[CandidateProfile] = Field(default_factory=list, max_length=200)
+    industries: list[CandidateProfile] = Field(default_factory=list, max_length=200)
 
 
 class RecoveryRequest(BaseModel):
-    missingCapability: str
+    missingCapability: str = Field(min_length=1, max_length=200)
     requirement: Requirement
-    universities: list[CandidateProfile] = []
-    teams: list[CandidateProfile] = []
-    mentors: list[CandidateProfile] = []
-    industries: list[CandidateProfile] = []
+    universities: list[CandidateProfile] = Field(default_factory=list, max_length=200)
+    teams: list[CandidateProfile] = Field(default_factory=list, max_length=200)
+    mentors: list[CandidateProfile] = Field(default_factory=list, max_length=200)
+    industries: list[CandidateProfile] = Field(default_factory=list, max_length=200)
+
+
+class AnalyzeResponse(BaseModel):
+    category: str
+    urgency: Urgency
+    requiredSkills: list[str]
+    keywords: list[str]
+    confidence: float = Field(ge=0, le=1)
+    explanation: str
+    rootCauses: list[str]
+    targetBeneficiaries: list[str]
+    challenges: list[str]
+    solutionDirections: list[str]
+    expectedOutcomes: list[str]
+    source: RemoteSource = "REMOTE"
+
+
+class SimilarProblemResponse(BaseModel):
+    id: int = Field(gt=0)
+    title: str
+    similarity: float = Field(ge=0, le=1)
+    source: RemoteSource = "REMOTE"
+
+
+class DuplicateResponse(BaseModel):
+    similarProblems: list[SimilarProblemResponse]
+    source: RemoteSource = "REMOTE"
+
+
+class CapabilityResponse(BaseModel):
+    capability: str
+    description: str
+    requiredSkills: list[str]
+    priority: str
+    source: RemoteSource = "REMOTE"
+
+
+class DecomposeResponse(BaseModel):
+    capabilities: list[CapabilityResponse]
+    category: str
+    source: RemoteSource = "REMOTE"
+
+
+class ScoredMatchResponse(BaseModel):
+    id: int = Field(gt=0)
+    score: float = Field(ge=0, le=1)
+    explanation: str
+    contributingFactors: list[str]
+    source: RemoteSource = "REMOTE"
+
+
+class MatchResponse(BaseModel):
+    matchType: EntityType
+    results: list[ScoredMatchResponse]
+    source: RemoteSource = "REMOTE"
+
+
+class StakeholderPickResponse(BaseModel):
+    type: EntityType
+    id: int = Field(gt=0)
+    name: str
+    score: float = Field(ge=0, le=1)
+    reason: str
+    contribution: str
+    gapSkills: list[str]
+    details: dict[str, Any]
+    source: RemoteSource = "REMOTE"
+
+
+class RecommendationResponse(BaseModel):
+    stakeholders: list[StakeholderPickResponse]
+    narrative: str
+    source: RemoteSource = "REMOTE"
+
+
+class RecoveryPickResponse(BaseModel):
+    entityType: EntityType
+    id: int = Field(gt=0)
+    name: str
+    score: float = Field(ge=0, le=1)
+    reason: str
+    missingGapClosed: bool
+    source: RemoteSource = "REMOTE"
+
+
+class RecoveryResponse(BaseModel):
+    recommendations: list[RecoveryPickResponse]
+    narrative: str
+    source: RemoteSource = "REMOTE"
+
+
+BENEFICIARY_TERMS = {
+    "children": ("child", "children"),
+    "students": ("student", "students"),
+    "farmers": ("farmer", "farmers"),
+    "villagers": ("villager", "villagers"),
+    "residents": ("resident", "residents"),
+    "women": ("woman", "women"),
+    "elderly": ("elderly", "senior citizen"),
+    "patients": ("patient", "patients"),
+    "workers": ("worker", "workers"),
+    "commuters": ("commuter", "commuters"),
+}
+
+
+def structured_analysis_fields(text: str, category: str, keywords: list[str], skills: list[str],
+                               required_outcome: str) -> dict[str, list[str]]:
+    lower = text.lower()
+    root_causes = [f"Reported signal: {keyword}" for keyword in keywords[:5]]
+    challenges = [f"Reported condition: {keyword}" for keyword in keywords[:5]]
+    beneficiaries = [
+        label for label, terms in BENEFICIARY_TERMS.items()
+        if any(term in lower for term in terms)
+    ]
+    template = DECOMPOSITION_TEMPLATES.get(category, FALLBACK_DECOMPOSITION)
+    solutions = [f"Assess capability: {row[0]}" for row in template[:5]]
+    outcomes = (
+        [f"Stated outcome: {required_outcome.strip()}"]
+        if required_outcome and required_outcome.strip() else []
+    )
+    return {
+        "rootCauses": root_causes or ["Not stated in submission"],
+        "targetBeneficiaries": beneficiaries or ["Not specified in submission"],
+        "challenges": challenges or ["Not stated in submission"],
+        "solutionDirections": solutions,
+        "expectedOutcomes": outcomes or ["Not specified in submission"],
+    }
 
 
 @app.get("/health")
@@ -90,16 +225,16 @@ def health():
     return {"status": "ok"}
 
 
-@app.post("/analyze")
+@app.post("/analyze", response_model=AnalyzeResponse)
 def analyze(req: AnalyzeRequest):
     text = f"{req.title}. {req.description}"
     category, keywords, conf = engine.detect_category(text)
     urgency, urgency_conf = engine.detect_urgency(text)
     skills = engine.extract_skills(req.title, req.description, category)
     all_keywords = keywords + engine.extract_keywords(text, category)
-    # de-duplicate while keeping order
     seen = set()
     keywords_out = [k for k in all_keywords if not (k in seen or seen.add(k))]
+    structured = structured_analysis_fields(text, category, keywords, skills, req.requiredOutcome)
     return {
         "category": category,
         "urgency": urgency,
@@ -107,10 +242,12 @@ def analyze(req: AnalyzeRequest):
         "keywords": keywords_out[:8],
         "confidence": round(min(conf, urgency_conf), 3),
         "explanation": engine.explain_category(category, keywords[:5]),
+        **structured,
+        "source": "REMOTE",
     }
 
 
-@app.post("/duplicates")
+@app.post("/duplicates", response_model=DuplicateResponse)
 def duplicates(req: DuplicatesRequest):
     vec = engine.tf_vector(f"{req.title}. {req.description}")
     results = []
@@ -118,12 +255,12 @@ def duplicates(req: DuplicatesRequest):
         other = engine.tf_vector(f"{existing.title}. {existing.description}")
         sim = engine.cosine(vec, other)
         if sim >= 0.25:
-            results.append({"id": existing.id, "title": existing.title, "similarity": round(sim, 2)})
+            results.append({"id": existing.id, "title": existing.title, "similarity": round(sim, 2), "source": "REMOTE"})
     results.sort(key=lambda r: r["similarity"], reverse=True)
-    return {"similarProblems": results[:5]}
+    return {"similarProblems": results[:5], "source": "REMOTE"}
 
 
-@app.post("/decompose")
+@app.post("/decompose", response_model=DecomposeResponse)
 def decompose(req: DecomposeRequest):
     text = f"{req.title}. {req.description}".lower()
     category, _, _ = engine.detect_category(text)
@@ -136,12 +273,13 @@ def decompose(req: DecomposeRequest):
             "description": description,
             "requiredSkills": required,
             "priority": priority,
+            "source": "REMOTE",
         })
-    return {"capabilities": capabilities, "category": category}
+    return {"capabilities": capabilities, "category": category, "source": "REMOTE"}
 
 
-@app.post("/match/{match_type}")
-def match(match_type: str, req: MatchRequest):
+@app.post("/match/{match_type}", response_model=MatchResponse)
+def match(match_type: EntityType, req: MatchRequest):
     requirement = req.requirement.model_dump()
     results = [
         engine.score_candidate(requirement, c.model_dump())
@@ -151,13 +289,13 @@ def match(match_type: str, req: MatchRequest):
     for c, scored in zip(req.candidates, results):
         scored = dict(scored)
         scored["id"] = c.id
+        scored["source"] = "REMOTE"
         enriched.append(scored)
-    # names are already embedded in explanations
     ranked = engine.sort_scores(enriched)[:10]
-    return {"matchType": match_type, "results": ranked}
+    return {"matchType": match_type, "results": ranked, "source": "REMOTE"}
 
 
-def _stakeholder_row(pick_type: str, candidate: CandidateProfile, requirement: dict) -> dict:
+def _stakeholder_row(pick_type: EntityType, candidate: CandidateProfile, requirement: dict) -> dict:
     scored = engine.score_candidate(requirement, candidate.model_dump())
     req_skills = set(x.lower() for x in requirement.get("requiredSkills", []))
     cand_skills = set(x.lower() for x in (candidate.skills or []))
@@ -166,6 +304,8 @@ def _stakeholder_row(pick_type: str, candidate: CandidateProfile, requirement: d
         "name": candidate.name,
         "skills": candidate.skills or [],
         "tags": candidate.tags or [],
+        "availability": candidate.availability,
+        "experience": candidate.experience,
         "status": "candidate",
     }
     return {
@@ -179,18 +319,19 @@ def _stakeholder_row(pick_type: str, candidate: CandidateProfile, requirement: d
         ),
         "gapSkills": gap,
         "details": details,
+        "source": "REMOTE",
     }
 
 
-@app.post("/recommend")
+@app.post("/recommend", response_model=RecommendationResponse)
 def recommend(req: RecommendRequest):
     requirement = req.requirement.model_dump()
     picks = []
     for pick_type, group in (
-        ("university", req.universities),
-        ("team", req.teams),
-        ("mentor", req.mentors),
-        ("industry", req.industries),
+        ("UNIVERSITY", req.universities),
+        ("TEAM", req.teams),
+        ("MENTOR", req.mentors),
+        ("INDUSTRY", req.industries),
     ):
         if not group:
             continue
@@ -205,10 +346,10 @@ def recommend(req: RecommendRequest):
         )
     else:
         narrative = "Recommended the strongest stakeholders per type. All required capabilities are covered."
-    return {"stakeholders": picks, "narrative": narrative}
+    return {"stakeholders": picks, "narrative": narrative, "source": "REMOTE"}
 
 
-@app.post("/recovery")
+@app.post("/recovery", response_model=RecoveryResponse)
 def recovery(req: RecoveryRequest):
     requirement = req.requirement.model_dump()
     requirement["requiredSkills"] = [req.missingCapability]
@@ -236,6 +377,7 @@ def recovery(req: RecoveryRequest):
                 if closed else "partial/adjacent coverage — consider a knowledge transfer plan"
             ),
             "missingGapClosed": closed,
+            "source": "REMOTE",
         })
     recommendations.sort(key=lambda r: r["score"], reverse=True)
     top_closed = [r for r in recommendations if r["missingGapClosed"]]
@@ -249,7 +391,7 @@ def recovery(req: RecoveryRequest):
             f"No candidate directly covers '{req.missingCapability}'. "
             f"Recommended order combines the closest skill sets for a short knowledge-transfer sprint."
         )
-    return {"recommendations": recommendations[:8], "narrative": narrative}
+    return {"recommendations": recommendations[:8], "narrative": narrative, "source": "REMOTE"}
 
 
 if __name__ == "__main__":

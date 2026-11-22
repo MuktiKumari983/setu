@@ -2,7 +2,7 @@ package com.sih.innovationplatform.project;
 
 import com.sih.innovationplatform.ai.AiModels;
 import com.sih.innovationplatform.common.ApiException;
-import com.sih.innovationplatform.common.CurrentUser;
+import com.sih.innovationplatform.common.Roles;
 import com.sih.innovationplatform.industry.IndustryRepository;
 import com.sih.innovationplatform.match.MatchRepository;
 import com.sih.innovationplatform.match.MatchingService;
@@ -55,7 +55,7 @@ public class ProjectService {
     private final FacultyRepository facultyRepo;
     private final IndustryRepository industryRepo;
     private final MatchingService matchingService;
-    private final CurrentUser currentUser;
+    private final ProjectAccessService projectAccessService;
 
     private static final Map<String, Integer> STAGE_INDEX = new HashMap<>();
     private static final Map<String, Integer> STAGE_PROGRESS = new HashMap<>();
@@ -123,10 +123,10 @@ public class ProjectService {
     public List<ProjectResponse> list(Long userId) {
         User user = userRepo.findById(userId).orElseThrow(() -> ApiException.notFound("User not found"));
         List<Project> all = projectRepo.findAllByOrderByCreatedAtDesc();
-        if (List.of("PLATFORM_ADMIN", "GOVERNMENT_ADMIN", "INDUSTRY").contains(user.getRoleName())) {
+        if (List.of(Roles.PLATFORM_ADMIN, Roles.GOVERNMENT_ADMIN, Roles.INDUSTRY).contains(user.getRoleName())) {
             return all.stream().map(this::toResponse).toList();
         }
-        if ("UNIVERSITY_ADMIN".equals(user.getRoleName())) {
+        if (Roles.UNIVERSITY_ADMIN.equals(user.getRoleName())) {
             return all.stream()
                     .filter(p -> p.getUniversity() != null
                             && p.getUniversity().getId().equals(user.getLinkedUniversityId())
@@ -151,6 +151,11 @@ public class ProjectService {
     public ProjectResponse get(Long id) {
         Project p = projectRepo.findById(id).orElseThrow(() -> ApiException.notFound("Project not found"));
         return toResponse(p);
+    }
+
+    public ProjectResponse getForUser(Long id, Long userId) {
+        projectAccessService.requireMemberOrAdmin(id, userId);
+        return get(id);
     }
 
     private ProjectResponse toResponse(Project p) {
@@ -206,6 +211,7 @@ public class ProjectService {
 
     @Transactional
     public ProjectResponse changeStatus(Long id, StatusRequest req, Long userId) {
+        requireMemberOrAdmin(id, userId);
         User actor = userRepo.findById(userId).orElseThrow(() -> ApiException.notFound("User not found"));
         Project p = projectRepo.findById(id).orElseThrow(() -> ApiException.notFound("Project not found"));
         String target = req.status() == null ? null : req.status().toUpperCase();
@@ -247,6 +253,7 @@ public class ProjectService {
 
     @Transactional
     public ProjectResponse reportFailure(Long id, FailureRequest req, Long userId) {
+        requireMemberOrAdmin(id, userId);
         User actor = userRepo.findById(userId).orElseThrow(() -> ApiException.notFound("User not found"));
         Project p = projectRepo.findById(id).orElseThrow(() -> ApiException.notFound("Project not found"));
 
@@ -269,6 +276,7 @@ public class ProjectService {
 
     @Transactional
     public ProjectResponse resolveFailure(Long id, String note, Long userId) {
+        requireMemberOrAdmin(id, userId);
         User actor = userRepo.findById(userId).orElseThrow(() -> ApiException.notFound("User not found"));
         Project p = projectRepo.findById(id).orElseThrow(() -> ApiException.notFound("Project not found"));
         FailureRecord latest = failureRepo.findByProjectIdOrderByCreatedAtDesc(id).stream()
@@ -291,12 +299,13 @@ public class ProjectService {
         return get(id);
     }
 
-    public AiModels.RecoveryRecommendation recoveryRecommendations(Long id) {
+    public AiModels.RecoveryRecommendation recoveryRecommendations(Long id, Long userId) {
+        requireMemberOrAdmin(id, userId);
         Project p = projectRepo.findById(id).orElseThrow(() -> ApiException.notFound("Project not found"));
         FailureRecord latest = failureRepo.findByProjectIdOrderByCreatedAtDesc(id).stream()
                 .findFirst().orElse(null);
         String missing = latest != null ? latest.getMissingCapability() : "GIS";
-        return matchingService.recovery(p.getProblem().getId(), missing);
+        return matchingService.recovery(p.getProblem().getId(), missing, userId);
     }
 
     public List<ProjectResponse> timelineStatus() {
@@ -324,7 +333,8 @@ public class ProjectService {
     @Transactional
     public ProjectResponse updateTask(Long projectId, Long taskId, TaskStatusRequest req, Long userId) {
         requireMemberOrAdmin(projectId, userId);
-        Task t = taskRepo.findById(taskId).orElseThrow(() -> ApiException.notFound("Task not found"));
+        Task t = taskRepo.findByIdAndProjectId(taskId, projectId)
+                .orElseThrow(() -> ApiException.notFound("Task not found in this project"));
         t.setStatus(req.status() == null ? t.getStatus() : req.status().toUpperCase());
         if ("DONE".equals(t.getStatus())) {
             t.setStatus("DONE");
@@ -349,7 +359,8 @@ public class ProjectService {
     @Transactional
     public ProjectResponse updateMilestone(Long projectId, Long milestoneId, MilestoneStatusRequest req, Long userId) {
         requireMemberOrAdmin(projectId, userId);
-        Milestone m = milestoneRepo.findById(milestoneId).orElseThrow(() -> ApiException.notFound("Milestone not found"));
+        Milestone m = milestoneRepo.findByIdAndProjectId(milestoneId, projectId)
+                .orElseThrow(() -> ApiException.notFound("Milestone not found in this project"));
         if ("COMPLETED".equalsIgnoreCase(req.status())) {
             m.markCompleted();
         } else if ("IN_PROGRESS".equalsIgnoreCase(req.status())) {
@@ -430,15 +441,6 @@ public class ProjectService {
     }
 
     private void requireMemberOrAdmin(Long projectId, Long userId) {
-        User user = userRepo.findById(userId).orElseThrow(() -> ApiException.notFound("User not found"));
-        if (currentUser.hasAnyRole("PLATFORM_ADMIN", "GOVERNMENT_ADMIN")) {
-            return;
-        }
-        Project p = projectRepo.findById(projectId).orElseThrow(() -> ApiException.notFound("Project not found"));
-        boolean member = isMember(p, user) || isCreator(p, user)
-                || p.getProblem().getSubmitter().getId().equals(userId);
-        if (!member) {
-            throw ApiException.forbidden("You are not a member of this project");
-        }
+        projectAccessService.requireMemberOrAdmin(projectId, userId);
     }
 }

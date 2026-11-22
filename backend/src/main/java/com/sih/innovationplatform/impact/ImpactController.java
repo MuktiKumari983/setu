@@ -2,6 +2,7 @@ package com.sih.innovationplatform.impact;
 
 import com.sih.innovationplatform.common.CurrentUser;
 import com.sih.innovationplatform.user.User;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,21 +24,21 @@ public class ImpactController {
 
     @PostMapping("/projects/{id}/impact")
     public ImpactDtos.ImpactResult submit(@PathVariable Long id,
-                                          @RequestBody ImpactDtos.SubmitRequest request) {
+                                          @Valid @RequestBody ImpactDtos.SubmitRequest request) {
         User user = currentUser.get();
         return impactService.submit(id, request, user.getId());
     }
 
     @PostMapping("/projects/{id}/impact/evidence")
     public ImpactDtos.ImpactResult addEvidence(@PathVariable Long id,
-                                               @RequestBody ImpactDtos.EvidenceRequest request) {
+                                               @Valid @RequestBody ImpactDtos.EvidenceRequest request) {
         User user = currentUser.get();
         return impactService.addEvidence(id, request, user.getId());
     }
 
     @PutMapping("/impact/evidence/{evidenceId}/review")
     public ImpactDtos.ImpactResult review(@PathVariable Long evidenceId,
-                                          @RequestBody ImpactDtos.ReviewRequest request) {
+                                          @Valid @RequestBody ImpactDtos.ReviewRequest request) {
         User user = currentUser.get();
         return impactService.reviewEvidence(evidenceId, request, user.getId());
     }

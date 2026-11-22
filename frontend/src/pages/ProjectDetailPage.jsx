@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { projectApi, impactApi } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import ErrorBanner from '../components/ErrorBanner'
+import Spinner from '../components/Spinner'
 import StatusPill from '../components/StatusPill'
 import { errorMessage, fmtDate, fmtDateTime } from '../util'
 
@@ -19,7 +21,7 @@ export default function ProjectDetailPage() {
   const [busy, setBusy] = useState(false)
   const [newStatus, setNewStatus] = useState('')
   const [progress, setProgress] = useState(0)
-  const [task, setTask] = useState({ title: '', description: '', priority: 'MEDIUM' })
+  const [task, setTask] = useState({ title: '', description: '', assignedToId: '', priority: 'MEDIUM' })
   const [milestone, setMilestone] = useState({ title: '', targetDate: '' })
   const [comment, setComment] = useState({ content: '', commentType: 'GENERAL' })
   const [document, setDocument] = useState({ name: '', url: '' })
@@ -44,7 +46,6 @@ export default function ProjectDetailPage() {
 
   useEffect(() => {
     load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   useEffect(() => {
@@ -54,7 +55,6 @@ export default function ProjectDetailPage() {
         .then(setImpactRecords)
         .catch(() => {})
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project])
 
   async function run(fn, then) {
@@ -80,7 +80,7 @@ export default function ProjectDetailPage() {
     await run(() => projectApi.progress(id, progress))
   }
 
-  if (!project && !error) return <p className="text-sm text-slate-500">Loading...</p>
+  if (!project && !error) return <Spinner label="Loading project..." />
 
   return (
     <div className="space-y-5">
@@ -94,7 +94,7 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
-      {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
+      <ErrorBanner message={error} />
 
       {project && (
         <>
@@ -142,9 +142,9 @@ export default function ProjectDetailPage() {
           {canEdit && (
             <div className="card grid gap-4 md:grid-cols-2">
               <div>
-                <label className="label">Lifecycle status</label>
+                <label className="label" htmlFor="project-status">Lifecycle status</label>
                 <div className="flex gap-2">
-                  <select className="input" value={newStatus} onChange={(e) => setNewStatus(e.target.value)}>
+                  <select id="project-status" className="input" value={newStatus} onChange={(e) => setNewStatus(e.target.value)}>
                     {STAGES.map((s) => (
                       <option key={s}>{s}</option>
                     ))}
@@ -155,9 +155,9 @@ export default function ProjectDetailPage() {
                 </div>
               </div>
               <div>
-                <label className="label">Implementation progress (points)</label>
+                <label className="label" htmlFor="project-progress">Implementation progress (points)</label>
                 <div className="flex items-center gap-2">
-                  <input type="range" min={0} max={100} step={5} value={progress} onChange={(e) => setProgress(Number(e.target.value))} className="w-full" />
+                  <input id="project-progress" type="range" min={0} max={100} step={5} value={progress} onChange={(e) => setProgress(Number(e.target.value))} className="w-full" aria-valuetext={`${progress} percent`} />
                   <span className="text-sm font-semibold text-slate-600">{progress}%</span>
                   <button className="btn-secondary" onClick={saveProgress} disabled={busy || progress === (project.progressPercent || 0)}>
                     Save
@@ -175,13 +175,26 @@ export default function ProjectDetailPage() {
                   className="mb-3 grid gap-2"
                   onSubmit={(e) => {
                     e.preventDefault()
-                    run(() => projectApi.addTask(id, task)).then(() => setTask({ title: '', description: '', priority: 'MEDIUM' }))
+                    const payload = { ...task, assignedToId: task.assignedToId ? Number(task.assignedToId) : null }
+                    run(() => projectApi.addTask(id, payload)).then(() => setTask({ title: '', description: '', assignedToId: '', priority: 'MEDIUM' }))
                   }}
                 >
-                  <input className="input" placeholder="Task title" value={task.title} onChange={(e) => setTask((t) => ({ ...t, title: e.target.value }))} required />
+                  <label className="sr-only" htmlFor="task-title">Task title</label>
+                  <input id="task-title" className="input" placeholder="Task title" value={task.title} onChange={(e) => setTask((t) => ({ ...t, title: e.target.value }))} required />
                   <div className="flex gap-2">
-                    <input className="input" placeholder="Details" value={task.description} onChange={(e) => setTask((t) => ({ ...t, description: e.target.value }))} />
-                    <select className="input w-32" value={task.priority} onChange={(e) => setTask((t) => ({ ...t, priority: e.target.value }))}>
+                    <label className="sr-only" htmlFor="task-details">Task details</label>
+                    <input id="task-details" className="input" placeholder="Details" value={task.description} onChange={(e) => setTask((t) => ({ ...t, description: e.target.value }))} />
+                    <label className="sr-only" htmlFor="task-assignee">Assign to</label>
+                    <select id="task-assignee" className="input w-40" value={task.assignedToId} onChange={(e) => setTask((t) => ({ ...t, assignedToId: e.target.value }))}>
+                      <option value="">Unassigned</option>
+                      {project.members?.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </select>
+                    <label className="sr-only" htmlFor="task-priority">Priority</label>
+                    <select id="task-priority" className="input w-32" value={task.priority} onChange={(e) => setTask((t) => ({ ...t, priority: e.target.value }))}>
                       <option>LOW</option>
                       <option>MEDIUM</option>
                       <option>HIGH</option>
@@ -204,6 +217,7 @@ export default function ProjectDetailPage() {
                         <select
                           className="rounded border border-slate-200 px-1.5 py-1 text-xs"
                           value={t.status}
+                          aria-label={`Status for ${t.title}`}
                           onChange={(e) => run(() => projectApi.updateTask(id, t.id, { status: e.target.value }))}
                         >
                           {TASK_STATUSES.map((s) => (
@@ -227,8 +241,10 @@ export default function ProjectDetailPage() {
                     run(() => projectApi.addMilestone(id, milestone)).then(() => setMilestone({ title: '', targetDate: '' }))
                   }}
                 >
-                  <input className="input" placeholder="Milestone title" value={milestone.title} onChange={(e) => setMilestone((m) => ({ ...m, title: e.target.value }))} required />
-                  <input className="input w-40" type="date" value={milestone.targetDate} onChange={(e) => setMilestone((m) => ({ ...m, targetDate: e.target.value }))} />
+                  <label className="sr-only" htmlFor="milestone-title">Milestone title</label>
+                  <input id="milestone-title" className="input" placeholder="Milestone title" value={milestone.title} onChange={(e) => setMilestone((m) => ({ ...m, title: e.target.value }))} required />
+                  <label className="sr-only" htmlFor="milestone-date">Target date</label>
+                  <input id="milestone-date" className="input w-40" type="date" value={milestone.targetDate} onChange={(e) => setMilestone((m) => ({ ...m, targetDate: e.target.value }))} />
                   <button className="btn-primary">Add</button>
                 </form>
               )}
@@ -245,6 +261,7 @@ export default function ProjectDetailPage() {
                         <select
                           className="rounded border border-slate-200 px-1.5 py-1 text-xs"
                           value={m.status}
+                          aria-label={`Status for ${m.title}`}
                           onChange={(e) => run(() => projectApi.updateMilestone(id, m.id, { status: e.target.value }))}
                         >
                           {MILESTONE_STATUSES.map((s) => (
@@ -267,12 +284,14 @@ export default function ProjectDetailPage() {
                   run(() => projectApi.addComment(id, comment)).then(() => setComment({ content: '', commentType: 'GENERAL' }))
                 }}
               >
-                <select className="input w-36" value={comment.commentType} onChange={(e) => setComment((c) => ({ ...c, commentType: e.target.value }))}>
+                <label className="sr-only" htmlFor="comment-type">Comment type</label>
+                <select id="comment-type" className="input w-36" value={comment.commentType} onChange={(e) => setComment((c) => ({ ...c, commentType: e.target.value }))}>
                   <option>GENERAL</option>
                   <option>MENTOR</option>
                   <option>INDUSTRY</option>
                 </select>
-                <input className="input" placeholder="Add a comment" value={comment.content} onChange={(e) => setComment((c) => ({ ...c, content: e.target.value }))} required />
+                <label className="sr-only" htmlFor="comment-content">Add a comment</label>
+                <input id="comment-content" className="input" placeholder="Add a comment" value={comment.content} onChange={(e) => setComment((c) => ({ ...c, content: e.target.value }))} required />
                 <button className="btn-primary">Post</button>
               </form>
               <ul className="space-y-2">
@@ -298,8 +317,10 @@ export default function ProjectDetailPage() {
                   run(() => projectApi.addDocument(id, document)).then(() => setDocument({ name: '', url: '' }))
                 }}
               >
-                <input className="input" placeholder="Document name" value={document.name} onChange={(e) => setDocument((d) => ({ ...d, name: e.target.value }))} required />
-                <input className="input" placeholder="/files/report.pdf" value={document.url} onChange={(e) => setDocument((d) => ({ ...d, url: e.target.value }))} />
+                <label className="sr-only" htmlFor="document-name">Document name</label>
+                <input id="document-name" className="input" placeholder="Document name" value={document.name} onChange={(e) => setDocument((d) => ({ ...d, name: e.target.value }))} required />
+                <label className="sr-only" htmlFor="document-url">Document URL</label>
+                <input id="document-url" className="input" placeholder="https://example.com/report.pdf" value={document.url} onChange={(e) => setDocument((d) => ({ ...d, url: e.target.value }))} />
                 <button className="btn-primary">Add</button>
               </form>
               <ul className="space-y-1.5">
@@ -321,11 +342,11 @@ export default function ProjectDetailPage() {
                 {project.status === 'NEEDS_SUPPORT' ? 'Recovery: report or resolve failure' : 'Failure recovery'}
               </h3>
               {!failureMode ? (
-                <button className="btn-secondary" onClick={() => setFailureMode(true)}>
+                <button type="button" className="btn-secondary" onClick={() => setFailureMode(true)}>
                   Report a failure
                 </button>
               ) : (
-                <button className="btn-secondary" onClick={() => setFailureMode(false)}>
+                <button type="button" className="btn-secondary" onClick={() => setFailureMode(false)}>
                   Close
                 </button>
               )}
@@ -342,24 +363,27 @@ export default function ProjectDetailPage() {
                   })
                 }}
               >
-                <select className="input" value={failure.stage} onChange={(e) => setFailure((f) => ({ ...f, stage: e.target.value }))}>
+                <label className="sr-only" htmlFor="failure-stage">Failure stage</label>
+                <select id="failure-stage" className="input" value={failure.stage} onChange={(e) => setFailure((f) => ({ ...f, stage: e.target.value }))}>
                   <option value="">Stage</option>
                   {STAGES.map((s) => (
                     <option key={s}>{s}</option>
                   ))}
                 </select>
-                <input className="input" placeholder="What went wrong" value={failure.reason} onChange={(e) => setFailure((f) => ({ ...f, reason: e.target.value }))} required />
-                <input className="input" placeholder="Missing capability (e.g. GIS)" value={failure.missingCapability} onChange={(e) => setFailure((f) => ({ ...f, missingCapability: e.target.value }))} />
+                <label className="sr-only" htmlFor="failure-reason">What went wrong</label>
+                <input id="failure-reason" className="input" placeholder="What went wrong" value={failure.reason} onChange={(e) => setFailure((f) => ({ ...f, reason: e.target.value }))} required />
+                <label className="sr-only" htmlFor="failure-capability">Missing capability</label>
+                <input id="failure-capability" className="input" placeholder="Missing capability (e.g. GIS)" value={failure.missingCapability} onChange={(e) => setFailure((f) => ({ ...f, missingCapability: e.target.value }))} />
                 <button className="btn-danger md:col-span-3">Report failure & fetch recovery plan</button>
               </form>
             )}
 
             {project.status === 'NEEDS_SUPPORT' && (
               <div className="mt-3 flex flex-wrap items-center gap-2">
-                <button className="btn-primary" onClick={() => run(() => projectApi.resolveFailure(id))}>
+                <button type="button" className="btn-primary" onClick={() => run(() => projectApi.resolveFailure(id))}>
                   Resolve failure (restore to last stage)
                 </button>
-                <button className="btn-secondary" onClick={() => run(() => projectApi.recovery(id), 'setRecovery')}>
+                <button type="button" className="btn-secondary" onClick={() => run(() => projectApi.recovery(id), 'setRecovery')}>
                   Re-run recovery plan
                 </button>
               </div>
