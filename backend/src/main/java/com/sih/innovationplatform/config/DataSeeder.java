@@ -54,8 +54,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Seeds realistic demo data the first time an empty database is started.
@@ -71,6 +73,7 @@ public class DataSeeder implements CommandLineRunner {
     private static final LocalDate SEED_TARGET_DATE = LocalDate.of(2026, 1, 15);
     private static final LocalDateTime SEED_COMPLETED_AT = LocalDateTime.of(2026, 1, 15, 12, 0);
     private static final LocalDateTime SEED_REVIEWED_AT = LocalDateTime.of(2026, 1, 20, 10, 0);
+    private static final String MENTOR_FACULTY_NAME = "Dr. Anjali Verma";
 
     private final RoleRepository roleRepo;
     private final UserRepository userRepo;
@@ -95,19 +98,22 @@ public class DataSeeder implements CommandLineRunner {
     private final MatchRepository matchRepo;
     private final NotificationRepository notificationRepo;
     private final PasswordEncoder passwordEncoder;
+    private final Set<MatchKey> seededMatches = new HashSet<>();
 
     @Override
     @Transactional
     public void run(String... args) {
+        seededMatches.clear();
         if (problemRepo.count() > 0 || roleRepo.count() > 0 || userRepo.count() > 0
                 || categoryRepo.count() > 0 || universityRepo.count() > 0 || industryRepo.count() > 0
                 || projectRepo.count() > 0 || matchRepo.count() > 0) {
             return;
         }
         log.info("Seeding demo data...");
-        seedRolesAndUsers();
+        seedRoles();
         seedCategories();
         seedUniversities();
+        seedUsers();
         seedProblems();
         seedIndustries();
         seedProjects();
@@ -130,7 +136,7 @@ public class DataSeeder implements CommandLineRunner {
     private University anna;
     private University coep;
 
-    private void seedRolesAndUsers() {
+    private void seedRoles() {
         Map<String, String> roles = Map.of(
                 "CITIZEN", "Citizen / community member",
                 "STUDENT", "Student team member",
@@ -142,15 +148,37 @@ public class DataSeeder implements CommandLineRunner {
         for (Map.Entry<String, String> e : roles.entrySet()) {
             roleRepo.save(new Role(e.getKey(), e.getValue()));
         }
+    }
+
+    private void seedUsers() {
         admin = user("Platform Admin", "admin@example.com", "PLATFORM_ADMIN");
         government = user("District Coordination Office", "government@example.com", "GOVERNMENT_ADMIN");
         citizen = user("Meena Ramesh", "citizen@example.com", "CITIZEN");
         student = user("Arjun Nair", "student@example.com", "STUDENT");
-        facultyUser = user("Dr. Anjali Verma", "faculty@example.com", "FACULTY");
+        facultyUser = user(MENTOR_FACULTY_NAME, "faculty@example.com", "FACULTY");
         universityAdmin = user("Prof. Suresh Iyer", "university@example.com", "UNIVERSITY_ADMIN");
         industryUser = user("Kavita Rao", "industry@example.com", "INDUSTRY");
-        universityAdmin.setLinkedUniversityId(null);
-        userRepo.save(universityAdmin);
+        linkFacultyUserToUniversity(facultyUser);
+    }
+
+    void linkFacultyUserToUniversity(User facultyUser) {
+        Faculty mentor = facultyRepo.findAll().stream()
+                .filter(f -> MENTOR_FACULTY_NAME.equals(f.getName()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "Seeded faculty mentor '" + MENTOR_FACULTY_NAME + "' was not found"));
+        facultyUser.setLinkedUniversityId(persistedUniversityId(mentor.getUniversity()));
+        userRepo.save(facultyUser);
+    }
+
+    private Long persistedUniversityId(University university) {
+        if (university == null || university.getId() == null) {
+            return null;
+        }
+        return universityRepo.findById(university.getId())
+                .map(University::getId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Cannot link a user to missing university id " + university.getId()));
     }
 
     private User user(String name, String email, String roleName) {
@@ -213,7 +241,7 @@ public class DataSeeder implements CommandLineRunner {
         departmentRepo.save(new Department(coep, "Agricultural Engineering", "Agri tech, irrigation"));
         departmentRepo.save(new Department(coep, "Civil Engineering", "GIS, surveying"));
 
-        faculty("Dr. Anjali Verma", iitd, "Environmental Engineering", "Professor",
+        faculty(MENTOR_FACULTY_NAME, iitd, "Environmental Engineering", "Professor",
                 "Waste Management, IoT Sensors, GIS, Circular Economy",
                 "Smart solid waste management systems",
                 "Smart Bin pilot for NDMC Delhi", "anjali.verma@iitd.ac.in");
@@ -253,13 +281,6 @@ public class DataSeeder implements CommandLineRunner {
                 "GIS, Hydrology, Early Warning Systems, Data Analytics",
                 "River-level early warning systems",
                 "Chennai flood early warning prototype", "eswar@iitm.ac.in");
-        // Ensure faculty user account maps to the mentor profile
-        facultyRepo.findAll().stream()
-                .filter(f -> f.getName().equals("Dr. Anjali Verma"))
-                .findFirst().ifPresent(f -> {
-                    facultyUser.setLinkedUniversityId(f.getId());
-                    userRepo.save(facultyUser);
-                });
     }
 
     private void faculty(String name, University uni, String deptName, String title,
@@ -533,8 +554,7 @@ public class DataSeeder implements CommandLineRunner {
         // ---- failed pilots (recovery demo) ----
         Project flood = project(problems.get(5), iitm, aqua, f("Dr. Eswar Reddy", iitm), ind("GeoSense Technologies"),
                 Project.NEEDS_SUPPORT, "Flood early warning pilot stalled at GIS integration");
-        markFailed(flood, "GIS expertise missing for evacuation zone mapping");
-        Project waste = project(problems.get(0), iitd, green, f("Dr. Anjali Verma", iitd), ind("CivicSense Robotics"),
+        Project waste = project(problems.get(0), iitd, green, f(MENTOR_FACULTY_NAME, iitd), ind("CivicSense Robotics"),
                 Project.NEEDS_SUPPORT, "Waste collection pilot stalled at GIS route optimization");
 
         // ---- in progress ----
@@ -548,7 +568,7 @@ public class DataSeeder implements CommandLineRunner {
                 "TEAM_FORMED", "Attendance tracking pod");
         project(problems.get(9), nitt, ruralTech, f("Dr. Amit Panigrahi", nitt), ind("NetCivic"),
                 "PROPOSAL", "Community connectivity proposal");
-        project(problems.get(7), iitd, green, f("Dr. Anjali Verma", iitd), ind("CivicSense Robotics"),
+        project(problems.get(7), iitd, green, f(MENTOR_FACULTY_NAME, iitd), ind("CivicSense Robotics"),
                 "PILOT", "Street light tamper pilot");
 
         markFailed(waste, "GIS expertise missing for route optimization");
@@ -729,7 +749,14 @@ public class DataSeeder implements CommandLineRunner {
         return Math.min(0.99, (base + (int) (seed % 5)) / 100.0);
     }
 
-    private void match(Long problemId, String type, Long entityId, double score, String explanation, List<String> factors) {
+    void match(Long problemId, String type, Long entityId, double score, String explanation, List<String> factors) {
+        MatchKey key = new MatchKey(problemId, type, entityId);
+        if (!seededMatches.add(key)) {
+            return;
+        }
+        if (matchRepo.findByProblemIdAndEntityTypeAndEntityId(problemId, type, entityId).isPresent()) {
+            return;
+        }
         Match m = new Match();
         m.setProblem(problemRepo.getReferenceById(problemId));
         m.setEntityType(type);
@@ -739,6 +766,9 @@ public class DataSeeder implements CommandLineRunner {
         m.setContributingFactors(String.join(" | ", factors));
         m.setStatus("PROPOSED");
         matchRepo.save(m);
+    }
+
+    private record MatchKey(Long problemId, String entityType, Long entityId) {
     }
 
     private void seedImpact() {

@@ -89,6 +89,7 @@ public class ProblemService {
         }
 
         capabilityRepo.findByProblemId(problemId).forEach(cap -> capabilityRepo.delete(cap));
+        capabilityRepo.flush();
         List<AiModels.Capability> capabilities = aiGateway.decompose(
                 problem.getTitle(), problem.getDescription(), analysis.requiredSkills());
         for (AiModels.Capability cap : capabilities) {

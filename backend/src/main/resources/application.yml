@@ -29,6 +29,12 @@ spring:
 server:
   port: 8080
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
 app:
   # Make sure JWT secret is changed in production via env var.
   jwt:

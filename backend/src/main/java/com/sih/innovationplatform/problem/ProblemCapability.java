@@ -1,5 +1,6 @@
 package com.sih.innovationplatform.problem;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -29,6 +30,7 @@ public class ProblemCapability {
     @Column(name = "version", nullable = false)
     private Long version;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "problem_id", nullable = false)
     private Problem problem;
